@@ -1,0 +1,646 @@
+Types
+=====
+
+Stylesheet
+QualifiedRule
+AtRule
+
+
+
+§ 2. Description of CSS's Syntax
+
+- CSS document is a series of qualified rules and at-rules.
+- Qualified rule: prelude followed by block.
+  - For style rules, prelude is a series of selectors.
+- Declarations: a name followed by a colon followed by a value; semicolon separated.
+- At-rules have a basic structure: "@" + name.
+  - Some end with a semicolon.
+  - Some end with a block.
+- Names are always identifiers: start with [-a-z] followed by [-_a-z0-9] or escaped codepoints.
+
+
+§ 2.1. Escaping
+
+- Starts with \
+  - Followed by code point that is not a hex digit or newline.
+  - 1 - 6 hex digits followed by optional whitespace.
+
+
+§ 2.2 Error Handling
+
+- Recover gracefully, only throw away a minimum amount of content.
+- At top-level, "@" starts an at-rule, anything else is a qualified rule.
+- Once an at-rule starts, nothing is invalid.
+  - Everything before semicolon or block is prelude.
+  - Block is parsed according to at-rule's own grammar.
+- Qualified rule is similar except semicolons don't end them.
+  - First block is parsed as list of declarations.
+  - When parsing declarations, unknown syntax causes parser to move to next semicolon.
+- Stylesheets ending with open rule, decl, function, string, etc simply closes everything.
+  - Does not make them invalid.
+
+
+§ 3. Tokenizing and Parsing CSS
+
+- Error handling for user agents is well defined.
+  - Must abort at first error they do not wish to apply the rules below.
+- Output is a CSSStyleSheet object.
+
+§ 3.2. The input byte stream
+
+- Stream of bytes.
+- Encoding based on:
+  1. HTTP protocol specifying it.
+  2. Read first 1024 bytes and check for: @chartset "..."
+    • If 'utf-16be' or 'utf-16le' then use utf-8
+    • Otherwise use value specified.
+
+§ 3.3. Preprocessing the input stream
+
+- Must replace CR, FF, or CRLF to a single LF.
+- Replace NULL with U+FFFD
+
+
+§ 4. Tokenization
+
+- Each scan returns a single token.
+- Types:
+  * IDENT
+  * FUNCTION
+  * ATKEYWORD
+  * HASH
+  * STRING
+  * BADSTRING
+  * URL
+  * BADURL
+  * DELIM
+  * NUMBER
+  * PERCENTAGE
+  * DIMENSION
+  * UNICODERANGE
+  * INCLUDEMATCH
+  * DASHMATCH
+  * PREFIXMATCH
+  * SUFFIXMATCH
+  * SUBSTRINGMATCH
+  * COLUMN
+  * WHITESPACE
+  * CDO
+  * CDC
+  * COLON
+  * SEMICOLON
+  * COMMA
+  * LBRACKET
+  * RBRACKET
+  * LPAREN
+  * RPAREN
+  * LBRACE
+  * RBRACE
+- IDENT, FUNCTION, ATKEYWORD, HASH, STRING, URL have value with 0..* code points.
+- HASH has a type flag set to "id" or "restricted". Defaults to "restricted".
+- DELIM has a value with 1 code point.
+- NUMBER, PERCENTAGE, DIMENSION have 1..* code points and a numeric value.
+- NUMBER, DIMENSION have a flag set to "integer" (default) or "number".
+- DIMENSION has a unit with 1..* code points.
+- UNICODERANGE has a start and end pair of integers.
+
+- Tokenizer requires LL(3)!!!
+- Produces tokens designed to allow selectors to be parsed with LL(1).
+
+
+$ 4.1 Token Railroad diagrams
+
+* comment: "/*" + (anything but */) + "*/"
+* newline: \n | \r\n | \r | \f
+* whitespace: " " | \t | newline
+* hex-digit: [0-9a-fA-F]
+* escape: "\" + (^newline | ^hex-digit)
+          "\" + hex-digit{1,6} + whitespace{0,1}
+* whitespace-token: whitespace+
+* ws*: whitespace-token*
+* ident-token: -{0,1} + (a-zA-Z_|non-ASCII|escape) + (a-zA-Z_|0-9|non-ASCII|escape)
+* function-token: ident-token + "("
+* at-keyword-token: "@" + ident-token
+* hash-token: "#" + (a-zA-Z_|0-9|non-ASCII|escape)*
+* string-token: "\"" + (^"|^\n|escape|\+newline) + "\"" (or single quotes)
+* url-token: ident-token=="url" + "(" + ws* + (string-token|url-unquoted) + ws* + ")"
+* url-unquoted: (^"'()\|^whitespace|^non-printable|escape)
+* number-token: ("+"|"-") + digit+ + "." + digit+ + (e|E)+(+|-) + digit+
+* dimension-token: number-token ident-token
+* percentage-token: number-token + "%"
+* unicode-range-token: (u|U) + "+" + hex-digit{1,6} (or range)
+* include-match-token: "~="
+* dash-match-token: "|="
+* prefix-match-token: "^="
+* suffix-match-token: "$="
+* substring-match-token: "*="
+* column-match-token: "||"
+* CDO-token: "<!--"
+* CDC-token: "-->"
+
+§ 4.2. Definitions
+
+* code point: Unicode code point.
+* next input code point: the first unconsumed code point from the input stream.
+* current input code point: the last code point to be consumed.
+* reconsume the current input code point: push current to the front of the stream.
+* EOF code point: conceptual code point representing the end-of-stream.
+* digit: code point between U+0030-U+0039
+* hex digi: digit or code point in range of U+0041-U+0046 or U+0061-U+0066
+* uppercase letter: code point between "A" - "Z"
+* lowercase letter: code point between "a" - "z"
+* letter: uppercase or lowercase letter
+* non-ASCII code point: code point greater than U+0080
+* name-start code point: letter, non-ASCII code point or LOW LINE (_)
+* name code point: name code point, digit or HYPHEN-MINUS (-).
+* non-printable code point: U+0000-U+0008, U+000B, U+000E-U+001F, U+007F
+* newline: U+000A
+* whitespace: newline, U+0009 (tab), U+0020 (space)
+* surrogate code point: U+D800-U+DFFF inclusive
+* maximum allowed code point: U+10FFFF
+* identifier: portion of CSS with same syntax as ident-token. Has the "id" type.
+
+§ 4.3. Tokenizer Algorithms
+
+Transforms a stream of code points into a stream of tokens.
+
+§4.3.1. Consume a token
+
+* whitespace: consume as much as possible and return a whitespace-token.
+* ": Consume a string-token.
+* #: If next code point is a name code point or next two are a valid escape and
+     the 3 code points would start an identifier then return a hash token with
+     type flag set to "id" and name set to the identifier.
+     Otherwise return delim-token.
+* $: If next code point is "=" then return suffix-match-token.
+     Otherwise return delim-token.
+* ': Consume a string-token.
+* (: Return a (-token
+* ): Return a )-token
+* *: If next code point is "=" then return substring-match-token.
+     Otherwise return delim-token.
+* +: If next code point is a number, return a numeric-token.
+     Otherwise return delim-token.
+* ,: Return comma-token.
+* -: If next code point is a number, return numeric-token.
+     If next code point is an identifier, return ident-like token.
+     If next 2 code points are "->", return a CDC-token.
+     Otherwise return delim-token.
+* .: If next code point is a number, return numeric-token.
+     Otherwise return delim-token.
+* /: If next code point is "*", consume it and all code points up to "*/" or EOF.
+     Otherwise return delim-token.
+* :: Return colon-token.
+* ;: Return semicolon-token.
+* <: If the next 3 code points are "!--" return CDO.
+     Otherwise return delim-token.
+* @: If next 3 code points make an identifier, return at-keyword-token.
+     Otherwise return delim-token.
+* [: Return [-token.
+* \: If followed by valid escape, return ident-like token.
+     Otherwise this is a PARSE ERROR. Return delim-token.
+* ]: Return ]-token.
+* ^: If next code point is "=", return prefix-match-token.
+     Otherwise return delim-token.
+* {: Return {-token.
+* }: Return }-token.
+* u|U: If next 2 code points are "+" + hex-digit or "?", return unicode-range-token.
+       Otherwise return ident-like token.
+* |: If next code point is "=", return dash-match-token.
+     If next code point is "|", return column-token.
+     Otherwise return delim-token.
+* ~: If next code point is "=", return include-match-token.
+     Otherwise return delim-token.
+* EOF: Return eof-token.
+
+Return a delim-token for anything else.
+
+
+§ 4.3.2. Consume a numeric token
+
+Includes number-token, percentage-token, or dimension-token.
+
+1. Consume a number.
+2. If next 3 code points would start an identifier:
+  a. Create dimension-token
+  b. Consume a name, set to units.
+  c. Return dimension-token.
+3. Otherwise if next code point is "%" then return percentage-token.
+4. Otherwise return number-token.
+
+
+§ 4.3.3. Consume an ident-like token
+
+Includes ident-token, function-token, url-token, bad-url-token.
+
+1. Consume a name.
+2. If value is case-insensitive "url" followed by a "(", consume a url-token
+   and return it.
+3. Otherwise if next code point is "(" create a function-token and return it.
+4. Otherwise return an ident-token.
+
+
+§ 4.3.4. Consume a string token
+
+Includes a string-token or bad-string-token.
+
+Must set the ending code point that ends the string.
+
+1. Create a string-token.
+2. Repeatedly consume:
+  EOF: Return the string-token.
+  newline: This is a PARSE ERROR. Return bad-string-token.
+  \: If next code point is EOF, do nothing.
+     If next code point is newline then consume it.
+     If starts valid escape, append escaped code point.
+  Anything else: Append code point.
+
+
+§ 4.3.5. Consume a URL token
+
+Include url-token and bad-url-token.
+
+Assumes initial "url(" has been consumed.
+
+1. Create url-token.
+2. Consume whitespace.
+3. If next code point is EOF, return url-token.
+4. If next code point is "\"", consume a string token.
+   If bad-string-token returned, consume remenants of bad-url, and return bad-url-token.
+   Set url-token's value to string-token value.
+   Consume whitespace.
+   If next code point is EOF or ) then consume it and return url-token. Otherwise
+   return remenants of bad url and return bad-url-token.
+5. Repeatedly consume:
+  ) or EOF: return url-token.
+  whitespace: consume! if next code point is ) or EOF return url-token. otherwise
+    consume remenants and return bad-url-token.
+  " or ' or ( or non-printable: PARSE ERROR! Consume remenants, return bad-url.
+  \: if valid escape, append escaped code point. Otherwise parse error. Consume remenants, return bad-url.
+  anything else: append
+
+
+§ 4.3.6. Consume unicode-range token
+
+Includes unicode-range-token.
+
+Assumes initial "u+" has been consumed and next digit is hex-digit or ?
+
+1. Consume up to 6 hex digits. If less than 6, consume ? until chars totals 6.
+
+  If any ? were consumed:
+
+    a. Interpret value as hex number, replace ? with 0. This is the start of the range.
+
+    b. Interpret value as hex number, replace ? with F. This is the end of the range.
+
+    c. Return new unicode range.
+
+  Otherwise interpret as start of the range.
+
+2. If next 2 code points are - and hex digit, consume up to 6 hex digits.
+   This is the end of the range.
+
+3. Otherwise the end of the range is equal to the start.
+
+4. Return unicode-range-token.
+
+
+§ 4.3.7. Consume an escaped code point
+
+Assumes that \ is already consumed and next char is not a newline.
+
+Consume next code point.
+
+  hex digit: Consume up to 6 hex digits. If next code point is whitespace then
+             consume it too. Interpret as hex number. If value is 0, or a
+             surrogate code point, or greater than max, return U+FFFD.
+
+  EOF: Return U+FFFD
+
+  Anything else: return code point
+
+
+§ 4.3.8. Check if two code points are a valid escape.
+
+If first code point is not \, return false.
+
+If second code point is newline, return false.
+
+Otherwise return true.
+
+
+§ 4.3.9. Check if three code points would start an identifier
+
+Look at first code point:
+
+  -: If 2nd is a name-start code point or 2nd and 3rd are a valid escape, return true.
+     Otherwise return false.
+
+  name-start code point: return true
+
+  \: If 1st and 2nd are valid escape, return true. Otherwise return false.
+
+
+§ 4.3.10. Check if three code points would start a number
+
+Look at first code point:
+
+  + or -: If 2nd is digit, return true.
+          If 2nd is . and 3rd is digit, return true.
+          Otherwise return false.
+
+  .: If 2nd is digit return true. Otherwise return false.
+
+  digit: return true
+
+  anything else: return false
+
+
+§ 4.3.11. Consume a name
+
+Does not verify that code points constitute an ident-token.
+
+Repeatedly consume:
+
+  name code point: append to result
+
+  stream start with valid escape: consume escaped code point and append.
+
+  anything else: return result
+
+
+§ 4.3.12. Consume a number
+
+Returns 3-tuple of string representation, numeric value, and type.
+
+This does not verify that the first few code points make a number.
+
+1. Set *repr* to empty string and type to "integer".
+
+2. If next code point is + or -, consume it and append to repr.
+
+3. Consume digits and append to repr.
+
+4. If next 2 code points are . and digit then:
+   consume, append to repr, set type to "number", consume digits.
+
+5. If next 2 or 3 code points are (e|E) optionally followed by +/-, then a digit:
+   consume, append to repr, set type to "number", consume digits.
+
+6. Convert repr to number and set value.
+
+7. Return 3-tuple.
+
+
+§ 4.3.13. Convert a string to a number
+
+  ...
+
+
+§ 4.3.14. Consume remnants of a bad url
+
+This returns nothing. Only consume enough input to recover tokenizer.
+
+Repeatedly consume:
+
+  ) or EOF: Return
+
+  valid escape: consume escaped code point
+
+  anything else: do nothing.
+
+
+
+§ 5. Parsing
+
+* at-rule: name, prelude, and optional block.
+
+* qualified rule: prelude and {} block.
+
+* declaration: name, value, and important flag.
+               can be *properties* or *descriptors*
+
+* component value: preserved tokens, a function, or a simple block.
+
+* preserved token: any token except function-token, {-token, (-token, or [-token.
+                   }, ), ], bad-string, bad-url are always parse errors but are preserved for higher level error handling.
+
+* function: name and value (list of component values)
+
+* simple block: has token ([, (, or {) and a value (list of component values)
+
+
+§ 5.1. Parser Railroad Diagrams
+
+Stylesheet: (at-rule | qualified rule | whitespace-token | CDO | CDC)*
+
+Rule list: (at-rule | qualified rule | whitespace-token)*
+
+at-rule: at-keyword-token component-value* ({}-block | ;)
+
+qualified rule: component-value* {}-block
+
+declaration list: ws* at-rule declaration-list
+                  declaration
+                  declaration; declaration-list
+
+declaration: ident-token ws* : component-value* !important
+
+!important: ! ws* ident-token("important") ws*
+
+component-value: preserved-token
+                 {}-block
+                 ()-block
+                 []-block
+                 Function block
+
+{}-block: { component-value* }
+
+()-block: ( component-value* )
+
+[]-block: [ component-value* ]
+
+function-block: function-token component-value* )
+
+
+§ 5.3. Parser Entry Points
+
+* Parse stylesheet
+* Parse rule list
+* Parse rule
+* Parse declaration
+* Parse declaration list
+* Parse component value
+* Parse component value list
+
+
+§ 5.3.1 Parse stylesheet
+
+1. Create stylesheet
+2. Consume list of rules, set "top level" flag.
+3. Return stylesheet.
+
+§ 5.3.2. Parse list of rules
+
+1. Consume list of rules from stream of tokens with top-level flag unset.
+2. Return list.
+
+§ 5.3.3. Parse a rule
+
+1. Consume next token
+2. While token is whitespace-token, consume next token.
+3. If input token is EOF, return syntax error.
+   If token is at-keyword-token, consume an at-rule and let "rule" be the return value.
+   Otherwise consume qualified rule and let rule be the return value.
+   If nothing was returned the return a syntax error.
+4. While input token is whitespace-token, consume next token.
+5. If current token is EOF, return rule. Otherwise return syntax error.
+
+§ 5.3.4. Parse a declaration
+
+1. Consume next input token.
+2. While whitespace, consume next token.
+3. If current token is not ident-token, return syntax error.
+4. Consume a declaration. If anything was returned, return it.
+   Otherwise syntax error.
+
+§ 5.3.5. Parse a list of declarations
+
+This mixes declarations and at-rules.
+
+1. Consume a list of declarations.
+2. Return the returned list.
+
+§ 5.3.6. Parse a component value
+
+1. Consume next input token.
+2. While whitespace-token, consume next token.
+3. If current token is EOF, return syntax error.
+4. Unread token. Consume component value and return value. If nothing returned, syntax error!
+5. While whitespace-token, consume next token.
+6. If current token is EOF, return value. Otherwise syntax error.
+
+§ 5.3.7. Parse list of component values.
+
+1. Repeatedly consume component value until EOF.
+
+
+§ 5.4. Parser Algorithms
+
+Algorithms return EOF at their end.
+
+§ 5.4.1. Consume a list of rules
+
+Repeatedly consume next token:
+
+  whitespace-token: do nothing
+  EOF: return list of rules
+  CDO, CDC: If top-level set, do nothing.
+            Otherwise, unread. Consume a qualified rule. Append return value.
+  at-keyword-token: Unread. Consume an at-rule. Append return value.
+  anything else: Unread. Consume a qualified rule. Append return value.
+
+§ 5.4.2. Consume an at-rule
+
+Create new at-rule with name set to current token.
+
+Repeatedly consume:
+
+  semicolon-token, EOF: Return at-rule
+  {: Consume simple block, assign to at-rule's block, return at-rule.
+  simple-block with {-token: Assign block to at-rule, return at-rule.
+  anything else: Unread. Consume component value. Append to prelude.
+
+§ 5.4.3. Consume a qualified rule
+
+Create new qualified rule.
+
+Repeatedly consume:
+
+  EOF: parse error, return nothing.
+  {-token: Consume simple block and assign to rule. Return rule.
+  simple block with {-token: Assign to rule. Return rule.
+  Anything else: unread. Consume component value. Append to prelude.
+
+§ 5.4.4. Consume list of declarations
+
+Create empty list.
+
+Repeatedly consume:
+
+  whitespace-token, semicolon-token: do nothing.
+  EOF: return list.
+  at-keyword-token: Consume at-rule. Append to list.
+  ident-token: Initialize temporary list with current.
+               Repeatedly append while not semicolon-token or EOF.
+               Consume declaration from temporary list. Append result to list.
+  anything else: parse error. Repeatedly consume input until semicolon or EOF.
+
+
+§ 5.4.5. Consume a declaration
+
+Create new declaration with name set to current token.
+
+1. Consume next token.
+2. Consume while current is whitespace.
+3. If current is not colon-token, parse error. Return nothing.
+   Otherwise consume next token.
+4. Append tokens until EOF.
+5. If last two non-whitespace tokens are are delim-token<!> followed by
+   delim-token<important>, remove from value and set important flag.
+6. Return declaration.
+
+
+§ 5.4.6. Consume a component value
+
+Consume token.
+
+If current is {, [, or ( then consume a simple block and return it.
+
+Otherwise if function-token then consume function and return it.
+
+Otherwise return current.
+
+
+§ 5.4.7. Consume simple block
+
+Ending token is mirror variant of current token.
+
+Repeatedly consume:
+  
+  EOF, ending token: Return block.
+  anything else: Unread. Consume component value and append to block.
+
+
+§ 5.4.8. Consume a function
+
+Create function with name equal to current.
+
+Repeatedly consume:
+
+  EOF, )-token: Return function.
+  anything else: unread. Consume component value and append to function.
+
+
+
+§ 6. An+B Microsyntax
+
+* "even" and "odd" keywords allowed.
+* A and B can be negative but only positive results are used.
+* If A==0 && B==0 then no elements are matched.
+
+§ 6.1. Informal Syntax Description
+
+* If A==0 then An can be omitted.
+* If An is omitted then + can be omitted.
+* 1n+0 == n+0 == n
+
+§ 6.2. The <an+b> type
+
+* Use regular CSS tokens.
+
+
+
+§ 7. Defining Grammars for Rules and Other Values
+
