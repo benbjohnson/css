@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"strconv"
 )
 
 // Scanner implements a CSS3 standard compliant scanner.
@@ -24,6 +25,9 @@ type Scanner struct {
 	// Start and End are set after each unicode-range token.
 	Start int
 	End   int
+
+	// Ending represents the ending code point of a string.
+	Ending rune
 
 	rd  io.RuneReader
 	pos Pos
@@ -53,6 +57,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	s.NumberValue = 0
 	s.Start = 0
 	s.End = 0
+	s.Ending = '\000'
 
 	// Read next code point.
 	ch, err := s.read()
@@ -62,7 +67,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	}
 
 	// Scan all contiguous whitespace.
-	if ch == ' ' || ch == '\t' || ch == '\n' {
+	if isWhitespace(ch) {
 		tok = WHITESPACE
 		s.Value = s.scanWhitespace()
 		return
@@ -115,7 +120,7 @@ func (s *Scanner) scanWhitespace() string {
 		ch, err := s.read()
 		if err == io.EOF {
 			break
-		} else if ch != ' ' && ch != '\t' && ch != '\n' {
+		} else if !isWhitespace(ch) {
 			s.unread(ch)
 			break
 		}
@@ -127,24 +132,23 @@ func (s *Scanner) scanWhitespace() string {
 // scanString consumes a quoted string.
 func (s *Scanner) scanString() (Token, string) {
 	var buf bytes.Buffer
-	ending := s.ch
+	s.Ending = s.ch
 	for {
 		ch, err := s.read()
-		if err == io.EOF || ch == ending {
+		if err == io.EOF || ch == s.Ending {
 			return STRING, buf.String()
 		} else if ch == '\n' {
 			s.unread(ch)
 			return BADSTRING, buf.String()
 		} else if ch == '\\' {
+			if s.peekEscape() {
+				_, _ = buf.WriteRune(s.scanEscape())
+				continue
+			}
 			if next, err := s.read(); err == io.EOF {
 				continue
 			} else if next == '\n' {
 				_, _ = buf.WriteRune(next)
-			} else if s.peekEscape() {
-				_, _ = buf.WriteRune(s.scanEscape())
-			} else {
-				s.unread(next)
-				_, _ = buf.WriteRune(ch)
 			}
 		} else {
 			_, _ = buf.WriteRune(ch)
@@ -159,7 +163,27 @@ func (s *Scanner) scanName() string {
 
 // scanEscape consumes an escaped code point.
 func (s *Scanner) scanEscape() rune {
-	return '☃' // TODO(benbjohnson)
+	var buf bytes.Buffer
+	ch, err := s.read()
+	if isHexDigit(ch) {
+		_, _ = buf.WriteRune(ch)
+		for i := 0; i < 5; i++ {
+			if next, err := s.read(); err == io.EOF || isWhitespace(next) {
+				break
+			} else if !isHexDigit(next) {
+				s.unread(next)
+				break
+			} else {
+				_, _ = buf.WriteRune(next)
+			}
+		}
+		v, _ := strconv.ParseInt(buf.String(), 16, 0)
+		return rune(v)
+	} else if err == io.EOF {
+		return '\uFFFD'
+	} else {
+		return ch
+	}
 }
 
 // peekName checks if the next code point is a name code point.
@@ -169,7 +193,17 @@ func (s *Scanner) peekName() bool {
 
 // peekEscape checks if the next code points are a valid escape.
 func (s *Scanner) peekEscape() bool {
-	return false // TODO(benbjohnson)
+	// If the current code point is not a backslash then this is not an escape.
+	if s.ch != '\\' {
+		return false
+	}
+
+	// If the next code point is a newline then this is not an escape.
+	next, err := s.read()
+	if err != io.EOF {
+		s.unread(next)
+	}
+	return next != '\n'
 }
 
 // peekIdent checks if the next code points are a valid identifier.
@@ -230,4 +264,14 @@ func (s *Scanner) read() (rune, error) {
 func (s *Scanner) unread(ch rune) {
 	s.idx++
 	s.buf[s.idx] = ch
+}
+
+// isWhitespace returns true if the rune is a space, tab, or newline.
+func isWhitespace(ch rune) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n'
+}
+
+// isHexDigit returns true if the rune is a hex digit.
+func isHexDigit(ch rune) bool {
+	return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
 }

@@ -22,7 +22,9 @@ func TestScanner_Scan(t *testing.T) {
 		{`"hello world"`, css.STRING, `hello world`},
 		{`'hello world'`, css.STRING, `hello world`},
 		{"'foo\\\nbar'", css.STRING, "foo\nbar"},
-		{`'foo\ bar'`, css.STRING, `foo\ bar`},
+		{`'foo\ bar'`, css.STRING, `foo bar`},
+		{`'foo\\bar'`, css.STRING, `foo\bar`},
+		{`'frosty the \2603'`, css.STRING, `frosty the ☃`},
 	}
 
 	for i, tt := range tests {
