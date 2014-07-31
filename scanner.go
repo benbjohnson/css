@@ -35,7 +35,7 @@ type Scanner struct {
 	rd  io.RuneReader
 	pos Pos
 
-	buf  [3]rune // circular buffer
+	buf  [4]rune // circular buffer
 	bufi int     // circular buffer index
 	bufn int     // number of buffered characters
 }
