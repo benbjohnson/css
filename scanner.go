@@ -158,7 +158,8 @@ func (s *Scanner) scanString() (Token, string) {
 // Hash tokens' type flag is set to "id" if its value is an identifier.
 func (s *Scanner) scanHash() (Token, string) {
 	// If there is a name following the hash then we have a hash token.
-	if s.peekName() || s.peekEscape() {
+	ch, _ := s.read()
+	if isName(ch) || s.peekEscape() {
 		// If the name is an identifier then change the type.
 		if s.peekIdent() {
 			s.Type = "id"
@@ -198,15 +199,6 @@ func (s *Scanner) scanEscape() rune {
 	} else {
 		return ch
 	}
-}
-
-// peekName checks if the next code point is a name code point.
-func (s *Scanner) peekName() bool {
-	// If the current code point is a name code point then return true.
-	//if isName(s.ch) {
-	//	return true
-	//}
-	return false
 }
 
 // peekEscape checks if the next code points are a valid escape.
