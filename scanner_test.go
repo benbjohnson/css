@@ -44,6 +44,12 @@ func TestScanner_Scan(t *testing.T) {
 		{`*=`, css.SUBSTRINGMATCH, ``},
 		{`*X`, css.DELIM, `*`},
 		{`*`, css.DELIM, `*`},
+
+		// TODO: NUMBER
+		// TODO: DIMENSION
+		// TODO: PERCENTAGE
+
+		{`,`, css.COMMA, ``},
 	}
 
 	for i, tt := range tests {

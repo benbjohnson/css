@@ -80,6 +80,10 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		tok = RPAREN
 	} else if ch == '*' {
 		tok, s.Value = s.scanSubstringMatch()
+	} else if ch == '+' {
+		// TODO: tok, s.Value, s.IntValue, s.NumberValue = s.scanNumeric()
+	} else if ch == ',' {
+		tok = COMMA
 	}
 
 	return
