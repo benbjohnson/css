@@ -65,39 +65,15 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	ch := s.read()
 	if ch == eof {
 		tok = EOF
-		return
-	}
-
-	// Scan all contiguous whitespace.
-	if isWhitespace(ch) {
+	} else if isWhitespace(ch) {
 		tok = WHITESPACE
 		s.Value = s.scanWhitespace()
-		return
-	}
-
-	// Scan a string if it starts with a quote.
-	if ch == '"' || ch == '\'' {
+	} else if ch == '"' || ch == '\'' {
 		tok, s.Value = s.scanString()
-		return
-	}
-
-	// Scan a hash token.
-	if ch == '#' {
+	} else if ch == '#' {
 		tok, s.Value = s.scanHash()
-		return
-	}
-
-	// Scan a suffix-match token.
-	if ch == '$' {
-		if next := s.read(); next == eof {
-			tok = EOF
-		} else if next == '=' {
-			tok, s.Value = SUFFIXMATCH, "$="
-		} else {
-			s.unread()
-			tok, s.Value = DELIM, string(ch)
-		}
-		return
+	} else if ch == '$' {
+		tok, s.Value = s.scanSuffixMatch()
 	}
 
 	return
@@ -172,6 +148,15 @@ func (s *Scanner) scanHash() (Token, string) {
 	// If there is no name following the hash symbol then return delim-token.
 	s.unread()
 	return DELIM, "#"
+}
+
+// scanSuffixMatch consumes a suffix-match token.
+func (s *Scanner) scanSuffixMatch() (Token, string) {
+	if next := s.read(); next == '=' {
+		return SUFFIXMATCH, ""
+	}
+	s.unread()
+	return DELIM, "$"
 }
 
 // scanName consumes a name.
