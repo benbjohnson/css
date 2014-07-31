@@ -74,16 +74,63 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		tok, s.Value = s.scanHash()
 	} else if ch == '$' {
 		tok, s.Value = s.scanSuffixMatch()
-	} else if ch == '(' {
-		tok = LPAREN
-	} else if ch == ')' {
-		tok = RPAREN
 	} else if ch == '*' {
 		tok, s.Value = s.scanSubstringMatch()
+	} else if ch == '^' {
+		tok, s.Value = s.scanPrefixMatch()
+	} else if ch == '~' {
+		tok, s.Value = s.scanIncludeMatch()
 	} else if ch == '+' {
 		// TODO: tok, s.Value, s.IntValue, s.NumberValue = s.scanNumeric()
 	} else if ch == ',' {
 		tok = COMMA
+	} else if ch == '-' {
+		// TODO: Peek digit then scanNumeric().
+		// TODO: Peek identifier then scanIdent().
+		// TODO: Peek "->" then CDC.
+	} else if ch == '.' {
+		// TODO: tok, s.Value, s.IntValue, s.NumberValue = s.scanNumeric()
+	} else if ch == '/' {
+		// TODO: Peek asterisk then scan comment.
+		// TODO: Otherwise return DELIM.
+	} else if ch == ':' {
+		tok = COLON
+	} else if ch == ';' {
+		tok = SEMICOLON
+	} else if ch == '<' {
+		// TODO: Peek "!--" then CDO
+		// TODO: Otherwise DELIM.
+	} else if ch == '@' {
+		// TODO: Peek ident then at-keyword.
+		// TODO: Otherwise DELIM.
+	} else if ch == '(' {
+		tok = LPAREN
+	} else if ch == ')' {
+		tok = RPAREN
+	} else if ch == '[' {
+		tok = LBRACK
+	} else if ch == ']' {
+		tok = RBRACK
+	} else if ch == '{' {
+		tok = LBRACE
+	} else if ch == '}' {
+		tok = RBRACE
+	} else if ch == '\\' {
+		// TODO: Peek escape then scan ident.
+		// TODO: Otherwise parse error. Return DELIM with current code point.
+	} else if isDigit(ch) {
+		// TODO: Scan numeric.
+	} else if ch == 'u' || ch == 'U' {
+		// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
+		// TODO: Otherwise reconsume as ident.
+	} else if isNameStart(ch) {
+		// TODO: Reconsume as ident.
+	} else if ch == '|' {
+		// TODO: Peek "=" then dash-match token.
+		// TODO: Peek "|" then column token.
+		// TODO: Otherwise DELIM.
+	} else {
+		tok, s.Value = DELIM, string(ch)
 	}
 
 	return
@@ -169,13 +216,31 @@ func (s *Scanner) scanSuffixMatch() (Token, string) {
 	return DELIM, "$"
 }
 
-// scanSubstringMatch consumes a string-match token.
+// scanSubstringMatch consumes a substring-match token.
 func (s *Scanner) scanSubstringMatch() (Token, string) {
 	if next := s.read(); next == '=' {
 		return SUBSTRINGMATCH, ""
 	}
 	s.unread()
 	return DELIM, "*"
+}
+
+// scanPrefixMatch consumes a prefix-match token.
+func (s *Scanner) scanPrefixMatch() (Token, string) {
+	if next := s.read(); next == '=' {
+		return PREFIXMATCH, ""
+	}
+	s.unread()
+	return DELIM, "^"
+}
+
+// scanIncludeMatch consumes an include-match token.
+func (s *Scanner) scanIncludeMatch() (Token, string) {
+	if next := s.read(); next == '=' {
+		return INCLUDEMATCH, ""
+	}
+	s.unread()
+	return DELIM, "~"
 }
 
 // scanName consumes a name.

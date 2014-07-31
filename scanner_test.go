@@ -38,18 +38,31 @@ func TestScanner_Scan(t *testing.T) {
 		{`$X`, css.DELIM, `$`},
 		{`$`, css.DELIM, `$`},
 
-		{`(`, css.LPAREN, ``},
-		{`)`, css.RPAREN, ``},
-
 		{`*=`, css.SUBSTRINGMATCH, ``},
 		{`*X`, css.DELIM, `*`},
 		{`*`, css.DELIM, `*`},
+
+		{`^=`, css.PREFIXMATCH, ``},
+		{`^X`, css.DELIM, `^`},
+		{`^`, css.DELIM, `^`},
+
+		{`~=`, css.INCLUDEMATCH, ``},
+		{`~X`, css.DELIM, `~`},
+		{`~`, css.DELIM, `~`},
 
 		// TODO: NUMBER
 		// TODO: DIMENSION
 		// TODO: PERCENTAGE
 
 		{`,`, css.COMMA, ``},
+		{`:`, css.COLON, ``},
+		{`;`, css.SEMICOLON, ``},
+		{`(`, css.LPAREN, ``},
+		{`)`, css.RPAREN, ``},
+		{`[`, css.LBRACK, ``},
+		{`]`, css.RBRACK, ``},
+		{`{`, css.LBRACE, ``},
+		{`}`, css.RBRACE, ``},
 	}
 
 	for i, tt := range tests {
