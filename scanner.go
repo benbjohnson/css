@@ -15,15 +15,19 @@ type Scanner struct {
 	// Type is set after parsing an ident-token, function-token,
 	// at-keyword-token, hash-token, string-token, and url-token.
 	// It is set to either "id" or "unrestricted".
+	//
+	// This is also set after scanning a numeric token and can
+	// be set to "integer" or "number".
 	Type string
 
 	// Value is the literal representation of the last read token.
 	Value string
 
-	// These numeric values are set after scanning a number-token,
-	// a percentage-token, or a dimension-token.
-	IntValue    int
-	NumberValue int
+	// This numeric value is set after scanning a number-token,
+	// a percentage-token, or a dimension-token. The unit is
+	// returned for dimension tokens.
+	Number float64
+	Unit   string
 
 	// Start and End are set after each unicode-range token.
 	Start int
@@ -55,8 +59,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	// Initialize fields.
 	s.Type = "unrestricted"
 	s.Value = ""
-	s.IntValue = 0
-	s.NumberValue = 0
+	s.Number = 0
 	s.Start = 0
 	s.End = 0
 	s.Ending = '\000'
@@ -80,16 +83,24 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		tok, s.Value = s.scanPrefixMatch()
 	} else if ch == '~' {
 		tok, s.Value = s.scanIncludeMatch()
-	} else if ch == '+' {
-		// TODO: tok, s.Value, s.IntValue, s.NumberValue = s.scanNumeric()
 	} else if ch == ',' {
 		tok = COMMA
 	} else if ch == '-' {
-		// TODO: Peek digit then scanNumeric().
-		// TODO: Peek identifier then scanIdent().
-		// TODO: Peek "->" then CDC.
-	} else if ch == '.' {
-		// TODO: tok, s.Value, s.IntValue, s.NumberValue = s.scanNumeric()
+		// Scan then next two tokens and unread back to the hyphen.
+		ch1, ch2 := s.read(), s.read()
+		s.unread(3)
+
+		// If we have a digit next, it's a numeric token. If it's an identifier
+		// then scan an identifier, and if it's a "->" then it's a CDC.
+		if isDigit(ch1) || ch1 == '.' {
+			tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
+		} else if s.peekIdent() {
+			tok, s.Value = s.scanIdent()
+		} else if ch1 == '-' && ch2 == '>' {
+			tok = CDC
+		} else {
+			tok, s.Value = DELIM, "-"
+		}
 	} else if ch == '/' {
 		// TODO: Peek asterisk then scan comment.
 		// TODO: Otherwise return DELIM.
@@ -118,8 +129,9 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	} else if ch == '\\' {
 		// TODO: Peek escape then scan ident.
 		// TODO: Otherwise parse error. Return DELIM with current code point.
-	} else if isDigit(ch) {
-		// TODO: Scan numeric.
+	} else if ch == '+' || ch == '.' || isDigit(ch) {
+		s.unread(1)
+		tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
 	} else if ch == 'u' || ch == 'U' {
 		// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
 		// TODO: Otherwise reconsume as ident.
@@ -145,7 +157,7 @@ func (s *Scanner) scanWhitespace() string {
 		if ch == eof {
 			break
 		} else if !isWhitespace(ch) {
-			s.unread()
+			s.unread(1)
 			break
 		}
 		_, _ = buf.WriteRune(ch)
@@ -168,7 +180,7 @@ func (s *Scanner) scanString() (Token, string) {
 		if ch == eof || ch == s.Ending {
 			return STRING, buf.String()
 		} else if ch == '\n' {
-			s.unread()
+			s.unread(1)
 			return BADSTRING, buf.String()
 		} else if ch == '\\' {
 			if s.peekEscape() {
@@ -184,6 +196,107 @@ func (s *Scanner) scanString() (Token, string) {
 			_, _ = buf.WriteRune(ch)
 		}
 	}
+}
+
+// scanNumeric consumes a numeric token.
+//
+// This assumes that the current token is a +, -, . or digit.
+func (s *Scanner) scanNumeric() (tok Token, num float64, repr, typ, unit string) {
+	num, typ, repr = s.scanNumber()
+
+	// If the number is immediately followed by an identifier then scan dimension.
+	if s.read(); s.peekIdent() {
+		tok = DIMENSION
+		unit = s.scanName()
+		repr += unit
+		return
+	} else {
+		s.unread(1)
+	}
+
+	// If the number is followed by a percent sign then return a percentage.
+	if ch := s.read(); ch == '%' {
+		tok = PERCENTAGE
+		repr += "%"
+		return
+	} else {
+		s.unread(1)
+	}
+
+	// Otherwise return a number token.
+	tok = NUMBER
+	return
+}
+
+// scanNumber consumes a number.
+func (s *Scanner) scanNumber() (num float64, typ, repr string) {
+	var buf bytes.Buffer
+	typ = "integer"
+
+	// If initial code point is + or - then store it.
+	if ch := s.read(); ch == '+' || ch == '-' {
+		_, _ = buf.WriteRune(ch)
+	} else {
+		s.unread(1)
+	}
+
+	// Read as many digits as possible.
+	_, _ = buf.WriteString(s.scanDigits())
+
+	// If next code points are a full stop and digit then consume them.
+	if ch0 := s.read(); ch0 == '.' {
+		if ch1 := s.read(); isDigit(ch1) {
+			typ = "number"
+			_, _ = buf.WriteRune(ch0)
+			_, _ = buf.WriteRune(ch1)
+			_, _ = buf.WriteString(s.scanDigits())
+		} else {
+			s.unread(2)
+		}
+	} else {
+		s.unread(1)
+	}
+
+	// Consume scientific notation (e0, e+0, e-0, E0, E+0, E-0).
+	if ch0 := s.read(); ch0 == 'e' || ch0 == 'E' {
+		if ch1 := s.read(); ch1 == '+' || ch1 == '-' {
+			if ch2 := s.read(); isDigit(ch2) {
+				typ = "number"
+				_, _ = buf.WriteRune(ch0)
+				_, _ = buf.WriteRune(ch1)
+				_, _ = buf.WriteRune(ch2)
+			} else {
+				s.unread(3)
+			}
+		} else if isDigit(ch1) {
+			typ = "number"
+			_, _ = buf.WriteRune(ch0)
+			_, _ = buf.WriteRune(ch1)
+		} else {
+			s.unread(2)
+		}
+	} else {
+		s.unread(1)
+	}
+
+	// Parse number.
+	num, _ = strconv.ParseFloat(buf.String(), 64)
+	repr = buf.String()
+	return
+}
+
+// scanDigits consume a contiguous series of digits.
+func (s *Scanner) scanDigits() string {
+	var buf bytes.Buffer
+	for {
+		if ch := s.read(); isDigit(ch) {
+			_, _ = buf.WriteRune(ch)
+		} else {
+			s.unread(1)
+			break
+		}
+	}
+	return buf.String()
 }
 
 // scanHash consumes a hash token.
@@ -203,7 +316,7 @@ func (s *Scanner) scanHash() (Token, string) {
 	}
 
 	// If there is no name following the hash symbol then return delim-token.
-	s.unread()
+	s.unread(1)
 	return DELIM, "#"
 }
 
@@ -212,7 +325,7 @@ func (s *Scanner) scanSuffixMatch() (Token, string) {
 	if next := s.read(); next == '=' {
 		return SUFFIXMATCH, ""
 	}
-	s.unread()
+	s.unread(1)
 	return DELIM, "$"
 }
 
@@ -221,7 +334,7 @@ func (s *Scanner) scanSubstringMatch() (Token, string) {
 	if next := s.read(); next == '=' {
 		return SUBSTRINGMATCH, ""
 	}
-	s.unread()
+	s.unread(1)
 	return DELIM, "*"
 }
 
@@ -230,7 +343,7 @@ func (s *Scanner) scanPrefixMatch() (Token, string) {
 	if next := s.read(); next == '=' {
 		return PREFIXMATCH, ""
 	}
-	s.unread()
+	s.unread(1)
 	return DELIM, "^"
 }
 
@@ -239,7 +352,7 @@ func (s *Scanner) scanIncludeMatch() (Token, string) {
 	if next := s.read(); next == '=' {
 		return INCLUDEMATCH, ""
 	}
-	s.unread()
+	s.unread(1)
 	return DELIM, "~"
 }
 
@@ -254,10 +367,16 @@ func (s *Scanner) scanName() string {
 		} else if s.peekEscape() {
 			_, _ = buf.WriteRune(s.scanEscape())
 		} else {
-			s.unread()
+			s.unread(1)
 			return buf.String()
 		}
 	}
+}
+
+// scanIdent consumes a ident-like token.
+// This function can return an ident, function, url, or bad-url.
+func (s *Scanner) scanIdent() (Token, string) {
+	return 0, ""
 }
 
 // scanEscape consumes an escaped code point.
@@ -270,7 +389,7 @@ func (s *Scanner) scanEscape() rune {
 			if next := s.read(); next == eof || isWhitespace(next) {
 				break
 			} else if !isHexDigit(next) {
-				s.unread()
+				s.unread(1)
 				break
 			} else {
 				_, _ = buf.WriteRune(next)
@@ -295,14 +414,23 @@ func (s *Scanner) peekEscape() bool {
 	// If the next code point is a newline then this is not an escape.
 	next := s.read()
 	if next != eof {
-		s.unread()
+		s.unread(1)
 	}
 	return next != '\n'
 }
 
 // peekIdent checks if the next code points are a valid identifier.
 func (s *Scanner) peekIdent() bool {
-	return false // TODO(benbjohnson)
+	if s.peek() == '-' {
+		ch := s.read()
+		s.unread(1)
+		return isNameStart(ch) || s.peekEscape()
+	} else if isNameStart(s.peek()) {
+		return true
+	} else if s.peek() == '\\' && s.peekEscape() {
+		return true
+	}
+	return false
 }
 
 // read reads the next rune from the reader.
@@ -334,7 +462,7 @@ func (s *Scanner) read() rune {
 		if ch, _, err := s.rd.ReadRune(); err != nil {
 			// nop
 		} else if ch != '\n' {
-			s.unread()
+			s.unread(1)
 		}
 		ch = '\n'
 	}
@@ -358,10 +486,12 @@ func (s *Scanner) read() rune {
 	return ch
 }
 
-// unread puts a run on the internal buffer.
-func (s *Scanner) unread() {
-	s.bufi = ((s.bufi + len(s.buf) - 1) % len(s.buf))
-	s.bufn++
+// unread adds the previous n code points back onto the buffer.
+func (s *Scanner) unread(n int) {
+	for i := 0; i < n; i++ {
+		s.bufi = ((s.bufi + len(s.buf) - 1) % len(s.buf))
+		s.bufn++
+	}
 }
 
 // peek reads the current code point.
