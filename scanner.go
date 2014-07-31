@@ -7,6 +7,9 @@ import (
 	"strconv"
 )
 
+// eof represents an EOF file byte.
+var eof rune = 0
+
 // Scanner implements a CSS3 standard compliant scanner.
 type Scanner struct {
 	// Type is set after parsing an ident-token, function-token,
@@ -59,8 +62,8 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	s.Ending = '\000'
 
 	// Read next code point.
-	ch, err := s.read()
-	if err == io.EOF {
+	ch := s.read()
+	if ch == eof {
 		tok = EOF
 		return
 	}
@@ -86,7 +89,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 
 	// Scan a suffix-match token.
 	if ch == '$' {
-		if next, err := s.read(); err != nil {
+		if next := s.read(); next == eof {
 			tok = EOF
 		} else if next == '=' {
 			tok, s.Value = SUFFIXMATCH, "$="
@@ -105,8 +108,8 @@ func (s *Scanner) scanWhitespace() string {
 	var buf bytes.Buffer
 	_, _ = buf.WriteRune(s.peek())
 	for {
-		ch, err := s.read()
-		if err == io.EOF {
+		ch := s.read()
+		if ch == eof {
 			break
 		} else if !isWhitespace(ch) {
 			s.unread()
@@ -128,8 +131,8 @@ func (s *Scanner) scanString() (Token, string) {
 	var buf bytes.Buffer
 	s.Ending = s.peek()
 	for {
-		ch, err := s.read()
-		if err == io.EOF || ch == s.Ending {
+		ch := s.read()
+		if ch == eof || ch == s.Ending {
 			return STRING, buf.String()
 		} else if ch == '\n' {
 			s.unread()
@@ -139,7 +142,7 @@ func (s *Scanner) scanString() (Token, string) {
 				_, _ = buf.WriteRune(s.scanEscape())
 				continue
 			}
-			if next, err := s.read(); err == io.EOF {
+			if next := s.read(); next == eof {
 				continue
 			} else if next == '\n' {
 				_, _ = buf.WriteRune(next)
@@ -158,7 +161,7 @@ func (s *Scanner) scanString() (Token, string) {
 // Hash tokens' type flag is set to "id" if its value is an identifier.
 func (s *Scanner) scanHash() (Token, string) {
 	// If there is a name following the hash then we have a hash token.
-	ch, _ := s.read()
+	ch := s.read()
 	if isName(ch) || s.peekEscape() {
 		// If the name is an identifier then change the type.
 		if s.peekIdent() {
@@ -179,11 +182,11 @@ func (s *Scanner) scanName() string {
 // scanEscape consumes an escaped code point.
 func (s *Scanner) scanEscape() rune {
 	var buf bytes.Buffer
-	ch, err := s.read()
+	ch := s.read()
 	if isHexDigit(ch) {
 		_, _ = buf.WriteRune(ch)
 		for i := 0; i < 5; i++ {
-			if next, err := s.read(); err == io.EOF || isWhitespace(next) {
+			if next := s.read(); next == eof || isWhitespace(next) {
 				break
 			} else if !isHexDigit(next) {
 				s.unread()
@@ -194,7 +197,7 @@ func (s *Scanner) scanEscape() rune {
 		}
 		v, _ := strconv.ParseInt(buf.String(), 16, 0)
 		return rune(v)
-	} else if err == io.EOF {
+	} else if ch == eof {
 		return '\uFFFD'
 	} else {
 		return ch
@@ -209,8 +212,8 @@ func (s *Scanner) peekEscape() bool {
 	}
 
 	// If the next code point is a newline then this is not an escape.
-	next, err := s.read()
-	if err != io.EOF {
+	next := s.read()
+	if next != eof {
 		s.unread()
 	}
 	return next != '\n'
@@ -222,21 +225,22 @@ func (s *Scanner) peekIdent() bool {
 }
 
 // read reads the next rune from the reader.
-func (s *Scanner) read() (rune, error) {
+// This function will initially check for any characters that have been pushed
+// back onto the lookahead buffer and return those. Otherwise it will read from
+// the reader and do preprocessing to convert newline characters and NULL.
+// EOF is converted to a zero rune (\000) and returned.
+func (s *Scanner) read() rune {
 	// If we have runes on our internal lookahead buffer then return those.
 	if s.bufn > 0 {
 		s.bufi = ((s.bufi + 1) % len(s.buf))
 		s.bufn--
-		if ch := s.buf[s.bufi]; ch != '\000' {
-			return ch, nil
-		}
-		return 0, io.EOF
+		return s.buf[s.bufi]
 	}
 
 	// Otherwise read from the reader.
 	ch, _, err := s.rd.ReadRune()
 	if err != nil {
-		return 0, err
+		return eof
 	}
 
 	// Preprocess the input stream by replacing FF with LF. (§3.3)
@@ -246,10 +250,8 @@ func (s *Scanner) read() (rune, error) {
 
 	// Preprocess the input stream by replacing CR and CRLF with LF. (§3.3)
 	if ch == '\r' {
-		if ch, _, err := s.rd.ReadRune(); err == io.EOF {
+		if ch, _, err := s.rd.ReadRune(); err != nil {
 			// nop
-		} else if err != nil {
-			return 0, err
 		} else if ch != '\n' {
 			s.unread()
 		}
@@ -272,7 +274,7 @@ func (s *Scanner) read() (rune, error) {
 	// Add to circular buffer.
 	s.bufi = ((s.bufi + 1) % len(s.buf))
 	s.buf[s.bufi] = ch
-	return ch, nil
+	return ch
 }
 
 // unread puts a run on the internal buffer.
