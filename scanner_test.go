@@ -16,6 +16,7 @@ func TestScanner_Scan(t *testing.T) {
 	}{
 		{``, css.EOF, ``},
 		{`   `, css.WHITESPACE, `   `},
+
 		{`""`, css.STRING, ``},
 		{`"`, css.STRING, ``},
 		{`"foo`, css.STRING, `foo`},
@@ -25,6 +26,13 @@ func TestScanner_Scan(t *testing.T) {
 		{`'foo\ bar'`, css.STRING, `foo bar`},
 		{`'foo\\bar'`, css.STRING, `foo\bar`},
 		{`'frosty the \2603'`, css.STRING, `frosty the ☃`},
+
+		{`#foo`, css.HASH, `foo`},
+		{`#foo\2603 bar`, css.HASH, `foo☃bar`},
+		{`#-x`, css.HASH, `-x`},
+		{`#_x`, css.HASH, `_x`},
+		{`#18273`, css.HASH, `18273`},
+		{`#`, css.DELIM, `#`},
 	}
 
 	for i, tt := range tests {

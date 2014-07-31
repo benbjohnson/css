@@ -161,8 +161,7 @@ func (s *Scanner) scanString() (Token, string) {
 // Hash tokens' type flag is set to "id" if its value is an identifier.
 func (s *Scanner) scanHash() (Token, string) {
 	// If there is a name following the hash then we have a hash token.
-	ch := s.read()
-	if isName(ch) || s.peekEscape() {
+	if ch := s.read(); isName(ch) || s.peekEscape() {
 		// If the name is an identifier then change the type.
 		if s.peekIdent() {
 			s.Type = "id"
@@ -171,12 +170,25 @@ func (s *Scanner) scanHash() (Token, string) {
 	}
 
 	// If there is no name following the hash symbol then return delim-token.
+	s.unread()
 	return DELIM, "#"
 }
 
 // scanName consumes a name.
+// Consumes contiguous name code points and escaped code points.
 func (s *Scanner) scanName() string {
-	return "" // TODO(benbjohnson)
+	var buf bytes.Buffer
+	_, _ = buf.WriteRune(s.peek())
+	for {
+		if ch := s.read(); isName(ch) {
+			_, _ = buf.WriteRune(ch)
+		} else if s.peekEscape() {
+			_, _ = buf.WriteRune(s.scanEscape())
+		} else {
+			s.unread()
+			return buf.String()
+		}
+	}
 }
 
 // scanEscape consumes an escaped code point.
