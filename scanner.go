@@ -74,6 +74,12 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		tok, s.Value = s.scanHash()
 	} else if ch == '$' {
 		tok, s.Value = s.scanSuffixMatch()
+	} else if ch == '(' {
+		tok = LPAREN
+	} else if ch == ')' {
+		tok = RPAREN
+	} else if ch == '*' {
+		tok, s.Value = s.scanSubstringMatch()
 	}
 
 	return
@@ -157,6 +163,15 @@ func (s *Scanner) scanSuffixMatch() (Token, string) {
 	}
 	s.unread()
 	return DELIM, "$"
+}
+
+// scanSubstringMatch consumes a string-match token.
+func (s *Scanner) scanSubstringMatch() (Token, string) {
+	if next := s.read(); next == '=' {
+		return SUBSTRINGMATCH, ""
+	}
+	s.unread()
+	return DELIM, "*"
 }
 
 // scanName consumes a name.

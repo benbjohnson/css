@@ -37,6 +37,13 @@ func TestScanner_Scan(t *testing.T) {
 		{`$=`, css.SUFFIXMATCH, ``},
 		{`$X`, css.DELIM, `$`},
 		{`$`, css.DELIM, `$`},
+
+		{`(`, css.LPAREN, ``},
+		{`)`, css.RPAREN, ``},
+
+		{`*=`, css.SUBSTRINGMATCH, ``},
+		{`*X`, css.DELIM, `*`},
+		{`*`, css.DELIM, `*`},
 	}
 
 	for i, tt := range tests {
