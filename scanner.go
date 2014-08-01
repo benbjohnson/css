@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"strconv"
+	"strings"
 )
 
 // eof represents an EOF file byte.
@@ -35,6 +36,9 @@ type Scanner struct {
 
 	// Ending represents the ending code point of a string.
 	Ending rune
+
+	// Errors contains a list of all errors that occur during scanning.
+	Errors []*Error
 
 	rd  io.RuneReader
 	pos Pos
@@ -117,6 +121,8 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		} else if ch == ';' {
 			tok = SEMICOLON
 		} else if ch == '<' {
+			// Attempt to read a comment open ("<!--").
+			// If it's not possible then then rollback and return DELIM.
 			if ch0 := s.read(); ch0 == '!' {
 				if ch1 := s.read(); ch1 == '-' {
 					if ch2 := s.read(); ch2 == '-' {
@@ -130,8 +136,13 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 			s.unread(1)
 			tok, s.Value = DELIM, "<"
 		} else if ch == '@' {
-			// TODO: Peek ident then at-keyword.
-			// TODO: Otherwise DELIM.
+			// This is an at-keyword token if an identifier follows.
+			// Otherwise it's just a DELIM.
+			if s.read(); s.peekIdent() {
+				tok, s.Value = ATKEYWORD, s.scanName()
+			} else {
+				tok, s.Value = DELIM, "@"
+			}
 		} else if ch == '(' {
 			tok = LPAREN
 		} else if ch == ')' {
@@ -145,8 +156,14 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		} else if ch == '}' {
 			tok = RBRACE
 		} else if ch == '\\' {
-			// TODO: Peek escape then scan ident.
-			// TODO: Otherwise parse error. Return DELIM with current code point.
+			// Return a valid escape, if possible.
+			// Otherwise this is a parse error but continue on as a DELIM.
+			if s.peekEscape() {
+				tok, s.Value = s.scanIdent()
+			} else {
+				s.Errors = append(s.Errors, &Error{Message: "unescaped \\", Pos: pos})
+				tok, s.Value = DELIM, "\\"
+			}
 		} else if ch == '+' || ch == '.' || isDigit(ch) {
 			s.unread(1)
 			tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
@@ -163,10 +180,13 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 			tok, s.Value = DELIM, string(ch)
 		}
 
+		// C-style comments are ignored so they return an ILLEGAL token.
+		// If this occurs then just try again until we hit a real token or EOF.
 		if tok != ILLEGAL {
 			break
 		}
 	}
+
 	return
 }
 
@@ -399,7 +419,7 @@ func (s *Scanner) scanIncludeMatch() (Token, string) {
 // Consumes contiguous name code points and escaped code points.
 func (s *Scanner) scanName() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteRune(s.peek())
+	s.unread(1)
 	for {
 		if ch := s.read(); isName(ch) {
 			_, _ = buf.WriteRune(ch)
@@ -415,7 +435,27 @@ func (s *Scanner) scanName() string {
 // scanIdent consumes a ident-like token.
 // This function can return an ident, function, url, or bad-url.
 func (s *Scanner) scanIdent() (Token, string) {
-	return 0, ""
+	v := s.scanName()
+
+	// Check if this is the start of a url token.
+	if strings.ToLower(v) == "url" {
+		if ch := s.read(); ch == '(' {
+			return s.scanURL()
+		}
+		s.unread(1)
+	} else if ch := s.read(); ch == '(' {
+		return FUNCTION, v
+	}
+	s.unread(1)
+
+	return IDENT, v
+}
+
+// scanURL consumes the contents of a URL function.
+// This function assumes that the "url(" has just been consumed.
+// This function can return a url or bad-url token.
+func (s *Scanner) scanURL() (Token, string) {
+	return 0, "" // TODO(benbjohnson)
 }
 
 // scanEscape consumes an escaped code point.
@@ -452,9 +492,7 @@ func (s *Scanner) peekEscape() bool {
 
 	// If the next code point is a newline then this is not an escape.
 	next := s.read()
-	if next != eof {
-		s.unread(1)
-	}
+	s.unread(1)
 	return next != '\n'
 }
 

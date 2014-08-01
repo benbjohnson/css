@@ -20,6 +20,7 @@ func TestScanner_Scan(t *testing.T) {
 		start  int
 		end    int
 		ending rune
+		err    string
 	}{
 		{s: ``, tok: css.EOF},
 		{s: `   `, tok: css.WHITESPACE, value: `   `},
@@ -75,6 +76,14 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `<!-`, tok: css.DELIM, value: "<"},
 		{s: `<!--`, tok: css.CDO, value: ""},
 
+		{s: `@`, tok: css.DELIM, value: "@"},
+		{s: `@foo`, tok: css.ATKEYWORD, value: "foo"},
+
+		{s: `\2603`, tok: css.IDENT, value: "☃"},
+		{s: `\`, tok: css.IDENT, value: ""},
+		{s: `\ `, tok: css.IDENT, value: " "},
+		{s: "\\\n", tok: css.DELIM, value: `\`, err: "unescaped \\"},
+
 		{s: `$=`, tok: css.SUFFIXMATCH, value: ``},
 		{s: `$X`, tok: css.DELIM, value: `$`},
 		{s: `$`, tok: css.DELIM, value: `$`},
@@ -103,6 +112,10 @@ func TestScanner_Scan(t *testing.T) {
 	}
 
 	for i, tt := range tests {
+		//if i != 48 {
+		//	continue
+		//}
+
 		// Set test defaults.
 		if tt.typ == "" {
 			tt.typ = "unrestricted"
@@ -129,6 +142,16 @@ func TestScanner_Scan(t *testing.T) {
 			t.Errorf("%d. <%q> end: got %q, want %q", i, tt.s, s.End, tt.end)
 		} else if s.Ending != tt.ending {
 			t.Errorf("%d. <%q> ending: got %q, want %q", i, tt.s, s.Ending, tt.ending)
+		} else if tt.err != "" {
+			if len(s.Errors) == 0 {
+				t.Errorf("%d. <%q> error expected", i, tt.s)
+			} else if len(s.Errors) > 1 {
+				t.Errorf("%d. <%q> too many errors occurred", i, tt.s)
+			} else if s.Errors[0].Message != tt.err {
+				t.Errorf("%d. <%q> error: got %q, want %q", i, tt.s, s.Errors[0].Message, tt.err)
+			}
+		} else if tt.err == "" && len(s.Errors) > 0 {
+			t.Errorf("%d. <%q> unexpected error: %q", i, tt.s, s.Errors[0].Message)
 		}
 	}
 }
