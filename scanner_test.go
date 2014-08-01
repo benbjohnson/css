@@ -70,6 +70,11 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `/`, tok: css.DELIM, value: `/`},
 		{s: `/* this is * a comment */#`, tok: css.DELIM, value: "#"},
 
+		{s: `<`, tok: css.DELIM, value: "<"},
+		{s: `<!`, tok: css.DELIM, value: "<"},
+		{s: `<!-`, tok: css.DELIM, value: "<"},
+		{s: `<!--`, tok: css.CDO, value: ""},
+
 		{s: `$=`, tok: css.SUFFIXMATCH, value: ``},
 		{s: `$X`, tok: css.DELIM, value: `$`},
 		{s: `$`, tok: css.DELIM, value: `$`},

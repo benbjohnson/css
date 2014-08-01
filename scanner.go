@@ -117,8 +117,18 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		} else if ch == ';' {
 			tok = SEMICOLON
 		} else if ch == '<' {
-			// TODO: Peek "!--" then CDO
-			// TODO: Otherwise DELIM.
+			if ch0 := s.read(); ch0 == '!' {
+				if ch1 := s.read(); ch1 == '-' {
+					if ch2 := s.read(); ch2 == '-' {
+						tok = CDO
+						break
+					}
+					s.unread(1)
+				}
+				s.unread(1)
+			}
+			s.unread(1)
+			tok, s.Value = DELIM, "<"
 		} else if ch == '@' {
 			// TODO: Peek ident then at-keyword.
 			// TODO: Otherwise DELIM.
