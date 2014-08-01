@@ -64,87 +64,99 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 	s.End = 0
 	s.Ending = '\000'
 
-	// Read next code point.
-	ch := s.read()
-	if ch == eof {
-		tok = EOF
-	} else if isWhitespace(ch) {
-		tok = WHITESPACE
-		s.Value = s.scanWhitespace()
-	} else if ch == '"' || ch == '\'' {
-		tok, s.Value = s.scanString()
-	} else if ch == '#' {
-		tok, s.Value = s.scanHash()
-	} else if ch == '$' {
-		tok, s.Value = s.scanSuffixMatch()
-	} else if ch == '*' {
-		tok, s.Value = s.scanSubstringMatch()
-	} else if ch == '^' {
-		tok, s.Value = s.scanPrefixMatch()
-	} else if ch == '~' {
-		tok, s.Value = s.scanIncludeMatch()
-	} else if ch == ',' {
-		tok = COMMA
-	} else if ch == '-' {
-		// Scan then next two tokens and unread back to the hyphen.
-		ch1, ch2 := s.read(), s.read()
-		s.unread(3)
+	for {
+		// Read next code point.
+		ch := s.read()
+		if ch == eof {
+			tok = EOF
+		} else if isWhitespace(ch) {
+			tok = WHITESPACE
+			s.Value = s.scanWhitespace()
+		} else if ch == '"' || ch == '\'' {
+			tok, s.Value = s.scanString()
+		} else if ch == '#' {
+			tok, s.Value = s.scanHash()
+		} else if ch == '$' {
+			tok, s.Value = s.scanSuffixMatch()
+		} else if ch == '*' {
+			tok, s.Value = s.scanSubstringMatch()
+		} else if ch == '^' {
+			tok, s.Value = s.scanPrefixMatch()
+		} else if ch == '~' {
+			tok, s.Value = s.scanIncludeMatch()
+		} else if ch == ',' {
+			tok = COMMA
+		} else if ch == '-' {
+			// Scan then next two tokens and unread back to the hyphen.
+			ch1, ch2 := s.read(), s.read()
+			s.unread(3)
 
-		// If we have a digit next, it's a numeric token. If it's an identifier
-		// then scan an identifier, and if it's a "->" then it's a CDC.
-		if isDigit(ch1) || ch1 == '.' {
+			// If we have a digit next, it's a numeric token. If it's an identifier
+			// then scan an identifier, and if it's a "->" then it's a CDC.
+			if isDigit(ch1) || ch1 == '.' {
+				tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
+			} else if s.peekIdent() {
+				tok, s.Value = s.scanIdent()
+			} else if ch1 == '-' && ch2 == '>' {
+				tok = CDC
+			} else {
+				tok, s.Value = DELIM, "-"
+			}
+		} else if ch == '/' {
+			// Comments are ignored by the scanner so this will leave the tok
+			// set to ILLEGAL and the outer for loop will iterate again.
+			if ch1 := s.read(); ch1 == '*' {
+				s.scanComment()
+				tok = ILLEGAL
+			} else {
+				s.unread(1)
+				tok, s.Value = DELIM, "/"
+			}
+		} else if ch == ':' {
+			tok = COLON
+		} else if ch == ';' {
+			tok = SEMICOLON
+		} else if ch == '<' {
+			// TODO: Peek "!--" then CDO
+			// TODO: Otherwise DELIM.
+		} else if ch == '@' {
+			// TODO: Peek ident then at-keyword.
+			// TODO: Otherwise DELIM.
+		} else if ch == '(' {
+			tok = LPAREN
+		} else if ch == ')' {
+			tok = RPAREN
+		} else if ch == '[' {
+			tok = LBRACK
+		} else if ch == ']' {
+			tok = RBRACK
+		} else if ch == '{' {
+			tok = LBRACE
+		} else if ch == '}' {
+			tok = RBRACE
+		} else if ch == '\\' {
+			// TODO: Peek escape then scan ident.
+			// TODO: Otherwise parse error. Return DELIM with current code point.
+		} else if ch == '+' || ch == '.' || isDigit(ch) {
+			s.unread(1)
 			tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
-		} else if s.peekIdent() {
-			tok, s.Value = s.scanIdent()
-		} else if ch1 == '-' && ch2 == '>' {
-			tok = CDC
+		} else if ch == 'u' || ch == 'U' {
+			// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
+			// TODO: Otherwise reconsume as ident.
+		} else if isNameStart(ch) {
+			// TODO: Reconsume as ident.
+		} else if ch == '|' {
+			// TODO: Peek "=" then dash-match token.
+			// TODO: Peek "|" then column token.
+			// TODO: Otherwise DELIM.
 		} else {
-			tok, s.Value = DELIM, "-"
+			tok, s.Value = DELIM, string(ch)
 		}
-	} else if ch == '/' {
-		// TODO: Peek asterisk then scan comment.
-		// TODO: Otherwise return DELIM.
-	} else if ch == ':' {
-		tok = COLON
-	} else if ch == ';' {
-		tok = SEMICOLON
-	} else if ch == '<' {
-		// TODO: Peek "!--" then CDO
-		// TODO: Otherwise DELIM.
-	} else if ch == '@' {
-		// TODO: Peek ident then at-keyword.
-		// TODO: Otherwise DELIM.
-	} else if ch == '(' {
-		tok = LPAREN
-	} else if ch == ')' {
-		tok = RPAREN
-	} else if ch == '[' {
-		tok = LBRACK
-	} else if ch == ']' {
-		tok = RBRACK
-	} else if ch == '{' {
-		tok = LBRACE
-	} else if ch == '}' {
-		tok = RBRACE
-	} else if ch == '\\' {
-		// TODO: Peek escape then scan ident.
-		// TODO: Otherwise parse error. Return DELIM with current code point.
-	} else if ch == '+' || ch == '.' || isDigit(ch) {
-		s.unread(1)
-		tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
-	} else if ch == 'u' || ch == 'U' {
-		// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
-		// TODO: Otherwise reconsume as ident.
-	} else if isNameStart(ch) {
-		// TODO: Reconsume as ident.
-	} else if ch == '|' {
-		// TODO: Peek "=" then dash-match token.
-		// TODO: Peek "|" then column token.
-		// TODO: Otherwise DELIM.
-	} else {
-		tok, s.Value = DELIM, string(ch)
-	}
 
+		if tok != ILLEGAL {
+			break
+		}
+	}
 	return
 }
 
@@ -297,6 +309,23 @@ func (s *Scanner) scanDigits() string {
 		}
 	}
 	return buf.String()
+}
+
+// scanComment consumes all characters up to "*/", inclusive.
+// This function assumes that the initial "/*" have just been consumed.
+func (s *Scanner) scanComment() {
+	for {
+		ch0 := s.read()
+		if ch0 == eof {
+			break
+		} else if ch0 == '*' {
+			if ch1 := s.read(); ch1 == '/' {
+				break
+			} else {
+				s.unread(1)
+			}
+		}
+	}
 }
 
 // scanHash consumes a hash token.
