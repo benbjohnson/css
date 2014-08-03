@@ -176,9 +176,17 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 		} else if isNameStart(ch) {
 			tok, s.Value = s.scanIdent()
 		} else if ch == '|' {
-			// TODO: Peek "=" then dash-match token.
-			// TODO: Peek "|" then column token.
-			// TODO: Otherwise DELIM.
+			// If the next token is an equals sign, it's a dash token.
+			// If the next token is a pipe, it's a column token.
+			// Otherwise, just treat this pipe as a delim token.
+			if ch1 := s.read(); ch1 == '=' {
+				tok, s.Value = DASHMATCH, ""
+			} else if ch1 == '|' {
+				tok, s.Value = COLUMN, ""
+			} else {
+				s.unread(1)
+				tok, s.Value = DELIM, string(ch)
+			}
 		} else {
 			tok, s.Value = DELIM, string(ch)
 		}

@@ -133,6 +133,11 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `~X`, tok: css.DELIM, value: `~`},
 		{s: `~`, tok: css.DELIM, value: `~`},
 
+		{s: `|=`, tok: css.DASHMATCH, value: ``},
+		{s: `||`, tok: css.COLUMN, value: ``},
+		{s: `|X`, tok: css.DELIM, value: `|`},
+		{s: `|`, tok: css.DELIM, value: `|`},
+
 		{s: `,`, tok: css.COMMA, value: ``},
 		{s: `:`, tok: css.COLON, value: ``},
 		{s: `;`, tok: css.SEMICOLON, value: ``},
