@@ -88,6 +88,15 @@ func TestScanner_Scan(t *testing.T) {
 
 		{s: `myFunc(`, tok: css.FUNCTION, value: `myFunc`},
 
+		{s: "u+A", tok: css.UNICODERANGE, start: 10, end: 10},
+		{s: "u+00000A", tok: css.UNICODERANGE, start: 10, end: 10},
+		{s: "u+000000A", tok: css.UNICODERANGE, start: 0, end: 0},
+		{s: "u+1?", tok: css.UNICODERANGE, start: 16, end: 31},
+		{s: "u+1?F", tok: css.UNICODERANGE, start: 16, end: 31},
+		{s: "u+02-04", tok: css.UNICODERANGE, start: 2, end: 4},
+		{s: "u+02-04?", tok: css.UNICODERANGE, start: 2, end: 4},
+		{s: "u+02-0000004", tok: css.UNICODERANGE, start: 2, end: 0},
+
 		{s: `100em`, tok: css.DIMENSION, typ: "integer", value: `100em`, num: 100, unit: "em"},
 		{s: `-1.2in`, tok: css.DIMENSION, typ: "number", value: `-1.2in`, num: -1.2, unit: "in"},
 

@@ -169,10 +169,17 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 			s.unread(1)
 			tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
 		} else if ch == 'u' || ch == 'U' {
-			// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
-
-			// Otherwise reconsume as ident.
-			tok, s.Value = s.scanIdent()
+			// Peek "+[0-9a-f]" or "+?", consume next code point, consume unicode-range.
+			ch1, ch2 := s.read(), s.read()
+			if ch1 == '+' && (isHexDigit(ch2) || ch2 == '?') {
+				s.unread(1)
+				tok = UNICODERANGE
+				s.Start, s.End = s.scanUnicodeRange()
+			} else {
+				// Otherwise reconsume as ident.
+				s.unread(2)
+				tok, s.Value = s.scanIdent()
+			}
 		} else if isNameStart(ch) {
 			tok, s.Value = s.scanIdent()
 		} else if ch == '|' {
@@ -550,6 +557,71 @@ func (s *Scanner) scanBadURL() {
 			s.scanEscape()
 		}
 	}
+}
+
+// scanUnicodeRange consumes a unicode-range token.
+func (s *Scanner) scanUnicodeRange() (start, end int) {
+	var buf bytes.Buffer
+
+	// Consume up to 6 hex digits first.
+	for i := 0; i < 6; i++ {
+		if ch := s.read(); isHexDigit(ch) {
+			_, _ = buf.WriteRune(ch)
+		} else {
+			s.unread(1)
+			break
+		}
+	}
+
+	// Consume question marks to total 6 characters (hex digits + question marks).
+	n := buf.Len()
+	for i := 0; i < 6-n; i++ {
+		if ch := s.read(); ch == '?' {
+			_, _ = buf.WriteRune(ch)
+		} else {
+			s.unread(1)
+			break
+		}
+	}
+
+	// If we have any question marks then calculate the range.
+	// To calculate the range, we replace "?" with "0" for the start and
+	// we replace "?" with "F" for the end.
+	if buf.Len() > n {
+		start64, _ := strconv.ParseInt(strings.Replace(buf.String(), "?", "0", -1), 16, 0)
+		end64, _ := strconv.ParseInt(strings.Replace(buf.String(), "?", "F", -1), 16, 0)
+		start, end = int(start64), int(end64)
+		return
+	}
+
+	// Otherwise calculate this token is the start of the range.
+	start64, _ := strconv.ParseInt(buf.String(), 16, 0)
+	start = int(start64)
+
+	// If the next two code points are a "-" and a hex digit then consume the end.
+	ch1, ch2 := s.read(), s.read()
+	if ch1 == '-' && isHexDigit(ch2) {
+		s.unread(1)
+
+		// Consume up to 6 hex digits for the ending range.
+		buf.Reset()
+		for i := 0; i < 6; i++ {
+			if ch := s.read(); isHexDigit(ch) {
+				_, _ = buf.WriteRune(ch)
+			} else {
+				s.unread(1)
+				break
+			}
+		}
+		end64, _ := strconv.ParseInt(buf.String(), 16, 0)
+		end = int(end64)
+		return
+	}
+	s.unread(2)
+
+	// Otherwise set the end value to the start value.
+	end = start
+	return
 }
 
 // scanEscape consumes an escaped code point.
