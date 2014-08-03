@@ -2,11 +2,19 @@ package css_test
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"testing"
 
 	"github.com/benbjohnson/css"
 )
+
+// testiter sets the table test iteration to run in isolation.
+var testiter = flag.Int("test.iter", -1, "table test number")
+
+func init() {
+	flag.Parse()
+}
 
 // Ensure than the scanner returns appropriate tokens and literals.
 func TestScanner_Scan(t *testing.T) {
@@ -42,9 +50,9 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `-.001`, tok: css.NUMBER, typ: "number", value: `-.001`, num: -0.001},
 		{s: `10000`, tok: css.NUMBER, typ: "integer", value: `10000`, num: 10000},
 		{s: `10000.`, tok: css.NUMBER, typ: "integer", value: `10000`, num: 10000},
-		{s: `100E`, tok: css.NUMBER, typ: "integer", value: `100`, num: 100},
-		{s: `100E+`, tok: css.NUMBER, typ: "integer", value: `100`, num: 100},
-		{s: `100E-`, tok: css.NUMBER, typ: "integer", value: `100`, num: 100},
+		{s: `100E`, tok: css.DIMENSION, typ: "integer", value: `100E`, num: 100, unit: "E"},
+		{s: `100E+`, tok: css.DIMENSION, typ: "integer", value: `100E`, num: 100, unit: "E"},
+		{s: `100E-`, tok: css.DIMENSION, typ: "integer", value: `100E-`, num: 100, unit: "E-"},
 		{s: `1E2`, tok: css.NUMBER, typ: "number", value: `1E2`, num: 100},
 		{s: `1.5E2`, tok: css.NUMBER, typ: "number", value: `1.5E2`, num: 150},
 		{s: `1.5E+2`, tok: css.NUMBER, typ: "number", value: `1.5E+2`, num: 150},
@@ -54,6 +62,31 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `-100`, tok: css.NUMBER, typ: "integer", value: `-100`, num: -100},
 		{s: `-1.0`, tok: css.NUMBER, typ: "number", value: `-1.0`, num: -1},
 		{s: `-`, tok: css.DELIM, value: `-`},
+
+		{s: `url`, tok: css.IDENT, value: `url`},
+		{s: `myIdent`, tok: css.IDENT, value: `myIdent`},
+		{s: `my\2603`, tok: css.IDENT, value: `my☃`},
+
+		{s: `url(`, tok: css.URL, value: ``},
+		{s: `url(foo`, tok: css.URL, value: `foo`},
+		{s: `url(http://foo.com#bar?baz=bat)`, tok: css.URL, value: `http://foo.com#bar?baz=bat`},
+		{s: `url(  foo`, tok: css.URL, value: `foo`},
+		{s: `url(  foo  `, tok: css.URL, value: `foo`},
+		{s: `url(  \2603  `, tok: css.URL, value: `☃`},
+		{s: `url(foo)`, tok: css.URL, value: `foo`},
+		{s: `url("http://foo.com#bar?baz=bat")`, tok: css.URL, value: `http://foo.com#bar?baz=bat`},
+		{s: `url(  "foo"  `, tok: css.URL, value: `foo`},
+		{s: `url("foo"  `, tok: css.URL, value: `foo`},
+		{s: `url("foo")`, tok: css.URL, value: `foo`},
+		{s: `url("foo"x`, tok: css.BADURL, value: ``},
+		{s: `url("foo" x`, tok: css.BADURL, value: ``},
+		{s: `url(foo"`, tok: css.BADURL, value: ``, err: `invalid url code point: " (U+0022)`},
+		{s: `url(foo'`, tok: css.BADURL, value: ``, err: `invalid url code point: ' (U+0027)`},
+		{s: `url(foo(`, tok: css.BADURL, value: ``, err: `invalid url code point: ( (U+0028)`},
+		{s: "url(foo\001", tok: css.BADURL, value: ``, err: "invalid url code point: \001 (U+0001)"},
+		{s: "url(foo\\\n", tok: css.BADURL, value: ``, err: `unescaped \ in url`},
+
+		{s: `myFunc(`, tok: css.FUNCTION, value: `myFunc`},
 
 		{s: `100em`, tok: css.DIMENSION, typ: "integer", value: `100em`, num: 100, unit: "em"},
 		{s: `-1.2in`, tok: css.DIMENSION, typ: "number", value: `-1.2in`, num: -1.2, unit: "in"},
@@ -80,7 +113,7 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `@foo`, tok: css.ATKEYWORD, value: "foo"},
 
 		{s: `\2603`, tok: css.IDENT, value: "☃"},
-		{s: `\`, tok: css.IDENT, value: ""},
+		{s: `\`, tok: css.IDENT, value: "\uFFFD"},
 		{s: `\ `, tok: css.IDENT, value: " "},
 		{s: "\\\n", tok: css.DELIM, value: `\`, err: "unescaped \\"},
 
@@ -112,9 +145,10 @@ func TestScanner_Scan(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		//if i != 48 {
-		//	continue
-		//}
+		// Skips over tests if test.iter is set.
+		if *testiter > -1 && *testiter != i {
+			continue
+		}
 
 		// Set test defaults.
 		if tt.typ == "" {

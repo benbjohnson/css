@@ -3,13 +3,14 @@ package css
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
 )
 
 // eof represents an EOF file byte.
-var eof rune = 0
+var eof rune = -1
 
 // Scanner implements a CSS3 standard compliant scanner.
 type Scanner struct {
@@ -77,7 +78,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 			tok = WHITESPACE
 			s.Value = s.scanWhitespace()
 		} else if ch == '"' || ch == '\'' {
-			tok, s.Value = s.scanString()
+			tok, s.Value, s.Ending = s.scanString()
 		} else if ch == '#' {
 			tok, s.Value = s.scanHash()
 		} else if ch == '$' {
@@ -169,9 +170,11 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 			tok, s.Number, s.Value, s.Type, s.Unit = s.scanNumeric()
 		} else if ch == 'u' || ch == 'U' {
 			// TODO: Peek "+hex" or "+?", consume next code point, consume unicode-range.
-			// TODO: Otherwise reconsume as ident.
+
+			// Otherwise reconsume as ident.
+			tok, s.Value = s.scanIdent()
 		} else if isNameStart(ch) {
-			// TODO: Reconsume as ident.
+			tok, s.Value = s.scanIdent()
 		} else if ch == '|' {
 			// TODO: Peek "=" then dash-match token.
 			// TODO: Peek "|" then column token.
@@ -193,7 +196,7 @@ func (s *Scanner) Scan() (pos Pos, tok Token) {
 // scanWhitespace consumes the current code point and all subsequent whitespace.
 func (s *Scanner) scanWhitespace() string {
 	var buf bytes.Buffer
-	_, _ = buf.WriteRune(s.peek())
+	_, _ = buf.WriteRune(s.curr())
 	for {
 		ch := s.read()
 		if ch == eof {
@@ -214,16 +217,18 @@ func (s *Scanner) scanWhitespace() string {
 // a matching, unescaped ending quote.
 // An EOF closes out a string but does not return an error.
 // A newline will close a string and returns a bad-string token.
-func (s *Scanner) scanString() (Token, string) {
+func (s *Scanner) scanString() (tok Token, value string, ending rune) {
 	var buf bytes.Buffer
-	s.Ending = s.peek()
+	ending = s.curr()
 	for {
 		ch := s.read()
-		if ch == eof || ch == s.Ending {
-			return STRING, buf.String()
+		if ch == eof || ch == ending {
+			tok, value = STRING, buf.String()
+			return
 		} else if ch == '\n' {
 			s.unread(1)
-			return BADSTRING, buf.String()
+			tok, value = BADSTRING, buf.String()
+			return
 		} else if ch == '\\' {
 			if s.peekEscape() {
 				_, _ = buf.WriteRune(s.scanEscape())
@@ -455,7 +460,88 @@ func (s *Scanner) scanIdent() (Token, string) {
 // This function assumes that the "url(" has just been consumed.
 // This function can return a url or bad-url token.
 func (s *Scanner) scanURL() (Token, string) {
-	return 0, "" // TODO(benbjohnson)
+	// Consume all whitespace after the "(".
+	if ch := s.read(); isWhitespace(ch) {
+		s.scanWhitespace()
+	} else {
+		s.unread(1)
+	}
+
+	// Read the first non-whitespace character.
+	// If it starts with a single or double quote then consume a string and
+	// use the string's value as the URL.
+	if ch := s.read(); ch == eof {
+		return URL, ""
+	} else if ch == '"' || ch == '\'' {
+		// Scan the string as the value.
+		tok, value, _ := s.scanString()
+
+		// Scanning a bad-string causes a bad-url token.
+		if tok == BADSTRING {
+			s.scanBadURL()
+			return BADURL, ""
+		}
+
+		// Scan whitespace after the string.
+		if ch := s.read(); isWhitespace(ch) {
+			s.scanWhitespace()
+		}
+		s.unread(1)
+
+		// Scan right parenthesis.
+		if ch := s.read(); ch != ')' && ch != eof {
+			s.scanBadURL()
+			return BADURL, ""
+		}
+		return URL, value
+	}
+	s.unread(1)
+
+	// If we have a non-quote character then scan all non-whitespace, non-quote
+	// and non-lparen code points to form the URL value.
+	var buf bytes.Buffer
+	for {
+		ch := s.read()
+		if ch == ')' || ch == eof {
+			return URL, buf.String()
+		} else if isWhitespace(ch) {
+			s.scanWhitespace()
+			if ch0 := s.read(); ch0 == ')' || ch0 == eof {
+				return URL, buf.String()
+			} else {
+				s.scanBadURL()
+				return BADURL, ""
+			}
+		} else if ch == '"' || ch == '\'' || ch == '(' || isNonPrintable(ch) {
+			s.Errors = append(s.Errors, &Error{Message: fmt.Sprintf("invalid url code point: %c (%U)", ch, ch), Pos: s.pos})
+			s.scanBadURL()
+			return BADURL, ""
+		} else if ch == '\\' {
+			if s.peekEscape() {
+				_, _ = buf.WriteRune(s.scanEscape())
+			} else {
+				s.Errors = append(s.Errors, &Error{Message: "unescaped \\ in url", Pos: s.pos})
+				s.scanBadURL()
+				return BADURL, ""
+			}
+		} else {
+			_, _ = buf.WriteRune(ch)
+		}
+	}
+}
+
+// scanBadURL recovers the scanner from a malformed URL token.
+// We simply consume all non-) and non-eof characters and escaped code points.
+// This function does not return anything.
+func (s *Scanner) scanBadURL() {
+	for {
+		ch := s.read()
+		if ch == ')' || ch == eof {
+			return
+		} else if s.peekEscape() {
+			s.scanEscape()
+		}
+	}
 }
 
 // scanEscape consumes an escaped code point.
@@ -486,7 +572,7 @@ func (s *Scanner) scanEscape() rune {
 // peekEscape checks if the next code points are a valid escape.
 func (s *Scanner) peekEscape() bool {
 	// If the current code point is not a backslash then this is not an escape.
-	if s.peek() != '\\' {
+	if s.curr() != '\\' {
 		return false
 	}
 
@@ -498,13 +584,13 @@ func (s *Scanner) peekEscape() bool {
 
 // peekIdent checks if the next code points are a valid identifier.
 func (s *Scanner) peekIdent() bool {
-	if s.peek() == '-' {
+	if s.curr() == '-' {
 		ch := s.read()
 		s.unread(1)
 		return isNameStart(ch) || s.peekEscape()
-	} else if isNameStart(s.peek()) {
+	} else if isNameStart(s.curr()) {
 		return true
-	} else if s.peek() == '\\' && s.peekEscape() {
+	} else if s.curr() == '\\' && s.peekEscape() {
 		return true
 	}
 	return false
@@ -526,35 +612,35 @@ func (s *Scanner) read() rune {
 	// Otherwise read from the reader.
 	ch, _, err := s.rd.ReadRune()
 	if err != nil {
-		return eof
-	}
-
-	// Preprocess the input stream by replacing FF with LF. (§3.3)
-	if ch == '\f' {
-		ch = '\n'
-	}
-
-	// Preprocess the input stream by replacing CR and CRLF with LF. (§3.3)
-	if ch == '\r' {
-		if ch, _, err := s.rd.ReadRune(); err != nil {
-			// nop
-		} else if ch != '\n' {
-			s.unread(1)
-		}
-		ch = '\n'
-	}
-
-	// Replace NULL with Unicode replacement character. (§3.3)
-	if ch == '\000' {
-		ch = '\uFFFD'
-	}
-
-	// Track scanner position.
-	if ch == '\n' {
-		s.pos.Line++
-		s.pos.Char = 0
+		ch = eof
 	} else {
-		s.pos.Char++
+		// Preprocess the input stream by replacing FF with LF. (§3.3)
+		if ch == '\f' {
+			ch = '\n'
+		}
+
+		// Preprocess the input stream by replacing CR and CRLF with LF. (§3.3)
+		if ch == '\r' {
+			if ch, _, err := s.rd.ReadRune(); err != nil {
+				// nop
+			} else if ch != '\n' {
+				s.unread(1)
+			}
+			ch = '\n'
+		}
+
+		// Replace NULL with Unicode replacement character. (§3.3)
+		if ch == '\000' {
+			ch = '\uFFFD'
+		}
+
+		// Track scanner position.
+		if ch == '\n' {
+			s.pos.Line++
+			s.pos.Char = 0
+		} else {
+			s.pos.Char++
+		}
 	}
 
 	// Add to circular buffer.
@@ -572,7 +658,7 @@ func (s *Scanner) unread(n int) {
 }
 
 // peek reads the current code point.
-func (s *Scanner) peek() rune {
+func (s *Scanner) curr() rune {
 	return s.buf[s.bufi]
 }
 
@@ -609,4 +695,9 @@ func isNameStart(ch rune) bool {
 // isName returns true if the character is a name code point.
 func isName(ch rune) bool {
 	return isNameStart(ch) || isDigit(ch) || ch == '-'
+}
+
+// isNonPrintable returns true if the character is non-printable.
+func isNonPrintable(ch rune) bool {
+	return (ch >= '\u0000' && ch <= '\u0008') || ch == '\u000B' || (ch >= '\u000E' && ch <= '\u001F') || ch == '\u007F'
 }
