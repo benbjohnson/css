@@ -739,7 +739,7 @@ func (s *Scanner) unread(n int) {
 	}
 }
 
-// peek reads the current code point.
+// curr reads the current code point.
 func (s *Scanner) curr() rune {
 	return s.buf[s.bufi]
 }
