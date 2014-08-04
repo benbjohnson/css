@@ -52,3 +52,11 @@ func (v *RulePrinter) Visit(node css.Node) css.Visitor {
 }
 ```
 
+
+## Caveats
+
+The CSS scanner in this package only supports UTF-8 encoding. The @charset
+directive will be ignored. If you need to scan a different encoding then
+please convert it to UTF-8 first using a tool such as [iconv][iconv].
+
+[iconv]: http://en.wikipedia.org/wiki/Iconv

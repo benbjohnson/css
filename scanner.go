@@ -13,6 +13,9 @@ import (
 var eof rune = -1
 
 // Scanner implements a CSS3 standard compliant scanner.
+//
+// This implementation only allows UTF-8 encoding.
+// @charset directives will be ignored.
 type Scanner struct {
 	// Type is set after parsing an ident-token, function-token,
 	// at-keyword-token, hash-token, string-token, and url-token.
@@ -51,7 +54,6 @@ type Scanner struct {
 
 // NewScanner returns a new instance of Scanner.
 func NewScanner(r io.Reader) *Scanner {
-	// TODO(benbjohnson): Determine fallback encoding (§3.2).
 	return &Scanner{
 		rd: bufio.NewReader(r),
 	}
