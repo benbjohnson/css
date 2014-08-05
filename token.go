@@ -1,11 +1,44 @@
 package css
 
 // Token represents a lexical token.
-type Token int
+type Token struct {
+	// Type represents the type of token.
+	Type TokenType
+
+	// Flag is set after parsing an ident-token, function-token,
+	// at-keyword-token, hash-token, string-token, and url-token.
+	// It is set to either "id" or "unrestricted".
+	//
+	// This is also set after scanning a numeric token and can
+	// be set to "integer" or "number".
+	Flag string
+
+	// Value is the literal representation of the last read token.
+	Value string
+
+	// This numeric value is set after scanning a number-token,
+	// a percentage-token, or a dimension-token. The unit is
+	// returned for dimension tokens.
+	Number float64
+	Unit   string
+
+	// Start and End are set after each unicode-range token.
+	Start int
+	End   int
+
+	// Ending represents the ending code point of a string.
+	Ending rune
+
+	// Pos represents the position of the token in the stream.
+	Pos Pos
+}
+
+// TokenType represents a type of CSS3 token.
+type TokenType int
 
 const (
 	// Special tokens
-	ILLEGAL Token = iota
+	ILLEGAL TokenType = iota
 	EOF
 
 	// CSS Standard tokens
@@ -42,7 +75,7 @@ const (
 	RBRACE
 )
 
-var tokens = [...]string{
+var types = [...]string{
 	ILLEGAL: "ILLEGAL",
 	EOF:     "EOF",
 
@@ -80,9 +113,9 @@ var tokens = [...]string{
 }
 
 // String returns the string representation of the token.
-func (tok Token) String() string {
-	if tok >= 0 && tok < Token(len(tokens)) {
-		return tokens[tok]
+func (tok TokenType) String() string {
+	if tok >= 0 && tok < TokenType(len(types)) {
+		return types[tok]
 	}
 	return ""
 }

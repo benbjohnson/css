@@ -8,9 +8,9 @@ import (
 type parser struct {
 	scanner *Scanner
 
-	buf  [2]Token // circular buffer
-	bufi int      // circular buffer index
-	bufn int      // number of buffered tokens
+	buf  [2]*Token // circular buffer
+	bufi int       // circular buffer index
+	bufn int       // number of buffered tokens
 }
 
 // ParseStylesheet parses an input stream into a stylesheet.
@@ -44,7 +44,7 @@ func (p *parser) ParseComponentValues(r io.Reader) ComponentValues {
 }
 
 // scan reads the next token from the scanner.
-func (p *parser) scan() Token {
+func (p *parser) scan() *Token {
 	// If we have tokens on our internal lookahead buffer then return those.
 	if p.bufn > 0 {
 		p.bufi = ((p.bufi + 1) % len(p.buf))
@@ -53,7 +53,7 @@ func (p *parser) scan() Token {
 	}
 
 	// Otherwise read from the scanner.
-	_, tok := p.scanner.Scan()
+	tok := p.scanner.Scan()
 
 	// Add to circular buffer.
 	p.bufi = ((p.bufi + 1) % len(p.buf))
@@ -68,6 +68,6 @@ func (p *Scanner) unscan() {
 }
 
 // curr reads the current token.
-func (p *parser) curr() Token {
+func (p *parser) curr() *Token {
 	return p.buf[p.bufi]
 }
