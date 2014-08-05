@@ -1,4 +1,4 @@
-package css
+package scanner
 
 import (
 	"bufio"
@@ -7,6 +7,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/benbjohnson/css/token"
 )
 
 // eof represents an EOF file byte.
@@ -21,7 +23,7 @@ type Scanner struct {
 	Errors []*Error
 
 	rd  io.RuneReader
-	pos Pos
+	pos token.Pos
 
 	buf  [4]rune // circular buffer
 	bufi int     // circular buffer index
@@ -35,18 +37,16 @@ func NewScanner(r io.Reader) *Scanner {
 	}
 }
 
-func (s *Scanner) Scan() *Token {
+func (s *Scanner) Scan() token.Token {
 	for {
-		tok := &Token{Pos: s.pos}
-
 		// Read next code point.
 		ch := s.read()
 		if ch == eof {
-			tok.Type = EOF
+			return &token.EOF{}
 		} else if isWhitespace(ch) {
-			tok.Type, tok.Value = WHITESPACE, s.scanWhitespace()
+			return s.scanWhitespace()
 		} else if ch == '"' || ch == '\'' {
-			tok.Type, tok.Value, tok.Ending = s.scanString()
+			return s.scanString()
 		} else if ch == '#' {
 			tok.Type, tok.Value, tok.Flag = s.scanHash()
 		} else if ch == '$' {
@@ -175,7 +175,8 @@ func (s *Scanner) Scan() *Token {
 }
 
 // scanWhitespace consumes the current code point and all subsequent whitespace.
-func (s *Scanner) scanWhitespace() string {
+func (s *Scanner) scanWhitespace() token.Token {
+	pos := s.Pos
 	var buf bytes.Buffer
 	_, _ = buf.WriteRune(s.curr())
 	for {
@@ -188,7 +189,7 @@ func (s *Scanner) scanWhitespace() string {
 		}
 		_, _ = buf.WriteRune(ch)
 	}
-	return buf.String()
+	return &token.Whitespace{Value: buf.String(), Pos: pos}
 }
 
 // scanString consumes a quoted string. (§4.3.4)
@@ -198,18 +199,16 @@ func (s *Scanner) scanWhitespace() string {
 // a matching, unescaped ending quote.
 // An EOF closes out a string but does not return an error.
 // A newline will close a string and returns a bad-string token.
-func (s *Scanner) scanString() (typ TokenType, value string, ending rune) {
+func (s *Scanner) scanString() token.Token {
+	pos, ending := s.Pos, s.curr()
 	var buf bytes.Buffer
-	ending = s.curr()
 	for {
 		ch := s.read()
 		if ch == eof || ch == ending {
-			typ, value = STRING, buf.String()
-			return
+			return &token.String{Value: buf.String(), Ending: ending}
 		} else if ch == '\n' {
 			s.unread(1)
-			typ, value = BADSTRING, buf.String()
-			return
+			return &token.BadString{Value: buf.String(), Ending: ending}
 		} else if ch == '\\' {
 			if s.peekEscape() {
 				_, _ = buf.WriteRune(s.scanEscape())
@@ -457,10 +456,14 @@ func (s *Scanner) scanURL() (TokenType, string) {
 		return URL, ""
 	} else if ch == '"' || ch == '\'' {
 		// Scan the string as the value.
-		tok, value, _ := s.scanString()
+		tok := s.scanString()
 
 		// Scanning a bad-string causes a bad-url token.
-		if tok == BADSTRING {
+		var value string
+		switch tok := tok.(type) {
+		case *token.String:
+			value = tok.Value
+		case *token.BadString:
 			s.scanBadURL()
 			return BADURL, ""
 		}
@@ -748,4 +751,15 @@ func isName(ch rune) bool {
 // isNonPrintable returns true if the character is non-printable.
 func isNonPrintable(ch rune) bool {
 	return (ch >= '\u0000' && ch <= '\u0008') || ch == '\u000B' || (ch >= '\u000E' && ch <= '\u001F') || ch == '\u007F'
+}
+
+// Error represents a parse error.
+type Error struct {
+	Message string
+	Pos     token.Pos
+}
+
+// Error returns the formatted string error message.
+func (e *Error) Error() string {
+	return e.Message
 }

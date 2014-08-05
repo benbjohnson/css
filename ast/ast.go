@@ -1,4 +1,4 @@
-package css
+package ast
 
 // Node represents a node in the CSS3 abstract syntax tree.
 type Node interface {

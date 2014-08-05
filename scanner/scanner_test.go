@@ -1,4 +1,4 @@
-package css_test
+package scanner_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/benbjohnson/css"
+	"github.com/benbjohnson/css/scanner"
 )
 
 // testiter sets the table test iteration to run in isolation.
