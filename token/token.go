@@ -24,7 +24,6 @@ func (_ *PrefixMatch) token()    {}
 func (_ *SuffixMatch) token()    {}
 func (_ *SubstringMatch) token() {}
 func (_ *Column) token()         {}
-func (_ *Column) token()         {}
 func (_ *Whitespace) token()     {}
 func (_ *CDO) token()            {}
 func (_ *CDC) token()            {}
@@ -90,18 +89,21 @@ type Delim struct {
 }
 
 type Number struct {
+	Type   string
 	Number float64
 	Value  string
 	Pos    Pos
 }
 
 type Percentage struct {
+	Type   string
 	Number float64
 	Value  string
 	Pos    Pos
 }
 
 type Dimension struct {
+	Type   string
 	Number float64
 	Unit   string
 	Value  string

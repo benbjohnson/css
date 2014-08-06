@@ -25,13 +25,14 @@ type Scanner struct {
 	rd  io.RuneReader
 	pos token.Pos
 
-	buf  [4]rune // circular buffer
-	bufi int     // circular buffer index
-	bufn int     // number of buffered characters
+	buf    [4]rune      // circular buffer for runes
+	bufpos [4]token.Pos // circular buffer for position
+	bufi   int          // circular buffer index
+	bufn   int          // number of buffered characters
 }
 
-// NewScanner returns a new instance of Scanner.
-func NewScanner(r io.Reader) *Scanner {
+// New returns a new instance of Scanner.
+func New(r io.Reader) *Scanner {
 	return &Scanner{
 		rd: bufio.NewReader(r),
 	}
@@ -41,6 +42,8 @@ func (s *Scanner) Scan() token.Token {
 	for {
 		// Read next code point.
 		ch := s.read()
+		pos := s.Pos()
+
 		if ch == eof {
 			return &token.EOF{}
 		} else if isWhitespace(ch) {
@@ -48,17 +51,33 @@ func (s *Scanner) Scan() token.Token {
 		} else if ch == '"' || ch == '\'' {
 			return s.scanString()
 		} else if ch == '#' {
-			tok.Type, tok.Value, tok.Flag = s.scanHash()
+			return s.scanHash()
 		} else if ch == '$' {
-			tok.Type, tok.Value = s.scanSuffixMatch()
+			if next := s.read(); next == '=' {
+				return &token.SuffixMatch{Pos: pos}
+			}
+			s.unread(1)
+			return &token.Delim{Value: string(ch), Pos: pos}
 		} else if ch == '*' {
-			tok.Type, tok.Value = s.scanSubstringMatch()
+			if next := s.read(); next == '=' {
+				return &token.SubstringMatch{Pos: pos}
+			}
+			s.unread(1)
+			return &token.Delim{Value: string(ch), Pos: pos}
 		} else if ch == '^' {
-			tok.Type, tok.Value = s.scanPrefixMatch()
+			if next := s.read(); next == '=' {
+				return &token.PrefixMatch{Pos: pos}
+			}
+			s.unread(1)
+			return &token.Delim{Value: string(ch), Pos: pos}
 		} else if ch == '~' {
-			tok.Type, tok.Value = s.scanIncludeMatch()
+			if next := s.read(); next == '=' {
+				return &token.IncludeMatch{Pos: pos}
+			}
+			s.unread(1)
+			return &token.Delim{Value: string(ch), Pos: pos}
 		} else if ch == ',' {
-			tok.Type = COMMA
+			return &token.Comma{Pos: pos}
 		} else if ch == '-' {
 			// Scan then next two tokens and unread back to the hyphen.
 			ch1, ch2 := s.read(), s.read()
@@ -67,116 +86,102 @@ func (s *Scanner) Scan() token.Token {
 			// If we have a digit next, it's a numeric token. If it's an identifier
 			// then scan an identifier, and if it's a "->" then it's a CDC.
 			if isDigit(ch1) || ch1 == '.' {
-				tok.Type, tok.Number, tok.Value, tok.Flag, tok.Unit = s.scanNumeric()
+				return s.scanNumeric(pos)
 			} else if s.peekIdent() {
-				tok.Type, tok.Value = s.scanIdent()
+				return s.scanIdent()
 			} else if ch1 == '-' && ch2 == '>' {
-				tok.Type = CDC
+				return &token.CDC{Pos: pos}
 			} else {
-				tok.Type, tok.Value = DELIM, "-"
+				return &token.Delim{Value: "-", Pos: pos}
 			}
 		} else if ch == '/' {
-			// Comments are ignored by the scanner so this will leave the tok
-			// set to ILLEGAL and the outer for loop will iterate again.
+			// Comments are ignored by the scanner so restart the loop from
+			// the end of the comment and get the next token.
 			if ch1 := s.read(); ch1 == '*' {
 				s.scanComment()
-				tok.Type = ILLEGAL
-			} else {
-				s.unread(1)
-				tok.Type, tok.Value = DELIM, "/"
+				continue
 			}
+			s.unread(1)
+			return &token.Delim{Value: "/", Pos: pos}
 		} else if ch == ':' {
-			tok.Type = COLON
+			return &token.Colon{Pos: pos}
 		} else if ch == ';' {
-			tok.Type = SEMICOLON
+			return &token.Semicolon{Pos: pos}
 		} else if ch == '<' {
 			// Attempt to read a comment open ("<!--").
 			// If it's not possible then then rollback and return DELIM.
 			if ch0 := s.read(); ch0 == '!' {
 				if ch1 := s.read(); ch1 == '-' {
 					if ch2 := s.read(); ch2 == '-' {
-						tok.Type = CDO
-						return tok
+						return &token.CDO{Pos: pos}
 					}
 					s.unread(1)
 				}
 				s.unread(1)
 			}
 			s.unread(1)
-			tok.Type, tok.Value = DELIM, "<"
+			return &token.Delim{Value: "<", Pos: pos}
 		} else if ch == '@' {
 			// This is an at-keyword token if an identifier follows.
 			// Otherwise it's just a DELIM.
 			if s.read(); s.peekIdent() {
-				tok.Type, tok.Value = ATKEYWORD, s.scanName()
-			} else {
-				tok.Type, tok.Value = DELIM, "@"
+				return &token.AtKeyword{Value: s.scanName(), Pos: pos}
 			}
+			return &token.Delim{Value: "@", Pos: pos}
 		} else if ch == '(' {
-			tok.Type = LPAREN
+			return &token.LParen{Pos: pos}
 		} else if ch == ')' {
-			tok.Type = RPAREN
+			return &token.RParen{Pos: pos}
 		} else if ch == '[' {
-			tok.Type = LBRACK
+			return &token.LBrack{Pos: pos}
 		} else if ch == ']' {
-			tok.Type = RBRACK
+			return &token.RBrack{Pos: pos}
 		} else if ch == '{' {
-			tok.Type = LBRACE
+			return &token.LBrace{Pos: pos}
 		} else if ch == '}' {
-			tok.Type = RBRACE
+			return &token.RBrace{Pos: pos}
 		} else if ch == '\\' {
 			// Return a valid escape, if possible.
-			// Otherwise this is a parse error but continue on as a DELIM.
 			if s.peekEscape() {
-				tok.Type, tok.Value = s.scanIdent()
-			} else {
-				s.Errors = append(s.Errors, &Error{Message: "unescaped \\", Pos: s.pos})
-				tok.Type, tok.Value = DELIM, "\\"
+				return s.scanIdent()
 			}
+			// Otherwise this is a parse error but continue on as a DELIM.
+			s.Errors = append(s.Errors, &Error{Message: "unescaped \\", Pos: s.Pos()})
+			return &token.Delim{Value: "\\", Pos: pos}
 		} else if ch == '+' || ch == '.' || isDigit(ch) {
 			s.unread(1)
-			tok.Type, tok.Number, tok.Value, tok.Flag, tok.Unit = s.scanNumeric()
+			return s.scanNumeric(pos)
 		} else if ch == 'u' || ch == 'U' {
 			// Peek "+[0-9a-f]" or "+?", consume next code point, consume unicode-range.
 			ch1, ch2 := s.read(), s.read()
 			if ch1 == '+' && (isHexDigit(ch2) || ch2 == '?') {
 				s.unread(1)
-				tok.Type = UNICODERANGE
-				tok.Start, tok.End = s.scanUnicodeRange()
-			} else {
-				// Otherwise reconsume as ident.
-				s.unread(2)
-				tok.Type, tok.Value = s.scanIdent()
+				return s.scanUnicodeRange()
 			}
+			// Otherwise reconsume as ident.
+			s.unread(2)
+			return s.scanIdent()
 		} else if isNameStart(ch) {
-			tok.Type, tok.Value = s.scanIdent()
+			return s.scanIdent()
 		} else if ch == '|' {
 			// If the next token is an equals sign, it's a dash token.
 			// If the next token is a pipe, it's a column token.
 			// Otherwise, just treat this pipe as a delim token.
 			if ch1 := s.read(); ch1 == '=' {
-				tok.Type, tok.Value = DASHMATCH, ""
+				return &token.DashMatch{Pos: pos}
 			} else if ch1 == '|' {
-				tok.Type, tok.Value = COLUMN, ""
-			} else {
-				s.unread(1)
-				tok.Type, tok.Value = DELIM, string(ch)
+				return &token.Column{Pos: pos}
 			}
-		} else {
-			tok.Type, tok.Value = DELIM, string(ch)
+			s.unread(1)
+			return &token.Delim{Value: string(ch), Pos: pos}
 		}
-
-		// C-style comments are ignored so they return an ILLEGAL token.
-		// If this occurs then just try again until we hit a real token or EOF.
-		if tok.Type != ILLEGAL {
-			return tok
-		}
+		return &token.Delim{Value: string(ch), Pos: pos}
 	}
 }
 
 // scanWhitespace consumes the current code point and all subsequent whitespace.
 func (s *Scanner) scanWhitespace() token.Token {
-	pos := s.Pos
+	pos := s.Pos()
 	var buf bytes.Buffer
 	_, _ = buf.WriteRune(s.curr())
 	for {
@@ -200,15 +205,15 @@ func (s *Scanner) scanWhitespace() token.Token {
 // An EOF closes out a string but does not return an error.
 // A newline will close a string and returns a bad-string token.
 func (s *Scanner) scanString() token.Token {
-	pos, ending := s.Pos, s.curr()
+	pos, ending := s.Pos(), s.curr()
 	var buf bytes.Buffer
 	for {
 		ch := s.read()
 		if ch == eof || ch == ending {
-			return &token.String{Value: buf.String(), Ending: ending}
+			return &token.String{Value: buf.String(), Ending: ending, Pos: pos}
 		} else if ch == '\n' {
 			s.unread(1)
-			return &token.BadString{Value: buf.String(), Ending: ending}
+			return &token.BadString{Pos: pos}
 		} else if ch == '\\' {
 			if s.peekEscape() {
 				_, _ = buf.WriteRune(s.scanEscape())
@@ -228,37 +233,32 @@ func (s *Scanner) scanString() token.Token {
 // scanNumeric consumes a numeric token.
 //
 // This assumes that the current token is a +, -, . or digit.
-func (s *Scanner) scanNumeric() (typ TokenType, num float64, repr, flag, unit string) {
-	num, flag, repr = s.scanNumber()
+func (s *Scanner) scanNumeric(pos token.Pos) token.Token {
+	num, typ, repr := s.scanNumber()
 
 	// If the number is immediately followed by an identifier then scan dimension.
 	if s.read(); s.peekIdent() {
-		typ = DIMENSION
-		unit = s.scanName()
-		repr += unit
-		return
+		unit := s.scanName()
+		return &token.Dimension{Type: typ, Value: repr + unit, Number: num, Unit: unit, Pos: pos}
 	} else {
 		s.unread(1)
 	}
 
 	// If the number is followed by a percent sign then return a percentage.
 	if ch := s.read(); ch == '%' {
-		typ = PERCENTAGE
-		repr += "%"
-		return
+		return &token.Percentage{Type: typ, Value: repr + "%", Number: num, Pos: pos}
 	} else {
 		s.unread(1)
 	}
 
 	// Otherwise return a number token.
-	typ = NUMBER
-	return
+	return &token.Number{Type: typ, Value: repr, Number: num, Pos: pos}
 }
 
 // scanNumber consumes a number.
-func (s *Scanner) scanNumber() (num float64, flag, repr string) {
+func (s *Scanner) scanNumber() (num float64, typ, repr string) {
 	var buf bytes.Buffer
-	flag = "integer"
+	typ = "integer"
 
 	// If initial code point is + or - then store it.
 	if ch := s.read(); ch == '+' || ch == '-' {
@@ -273,7 +273,7 @@ func (s *Scanner) scanNumber() (num float64, flag, repr string) {
 	// If next code points are a full stop and digit then consume them.
 	if ch0 := s.read(); ch0 == '.' {
 		if ch1 := s.read(); isDigit(ch1) {
-			flag = "number"
+			typ = "number"
 			_, _ = buf.WriteRune(ch0)
 			_, _ = buf.WriteRune(ch1)
 			_, _ = buf.WriteString(s.scanDigits())
@@ -288,7 +288,7 @@ func (s *Scanner) scanNumber() (num float64, flag, repr string) {
 	if ch0 := s.read(); ch0 == 'e' || ch0 == 'E' {
 		if ch1 := s.read(); ch1 == '+' || ch1 == '-' {
 			if ch2 := s.read(); isDigit(ch2) {
-				flag = "number"
+				typ = "number"
 				_, _ = buf.WriteRune(ch0)
 				_, _ = buf.WriteRune(ch1)
 				_, _ = buf.WriteRune(ch2)
@@ -296,7 +296,7 @@ func (s *Scanner) scanNumber() (num float64, flag, repr string) {
 				s.unread(3)
 			}
 		} else if isDigit(ch1) {
-			flag = "number"
+			typ = "number"
 			_, _ = buf.WriteRune(ch0)
 			_, _ = buf.WriteRune(ch1)
 		} else {
@@ -349,57 +349,23 @@ func (s *Scanner) scanComment() {
 // It will return a hash token if the next code points are a name or valid escape.
 // It will return a delim token otherwise.
 // Hash tokens' type flag is set to "id" if its value is an identifier.
-func (s *Scanner) scanHash() (typ TokenType, value, flag string) {
+func (s *Scanner) scanHash() token.Token {
+	pos := s.Pos()
+
 	// If there is a name following the hash then we have a hash token.
 	if ch := s.read(); isName(ch) || s.peekEscape() {
-		flag = "unrestricted"
+		typ := "unrestricted"
 
 		// If the name is an identifier then change the type.
 		if s.peekIdent() {
-			flag = "id"
+			typ = "id"
 		}
-		return HASH, s.scanName(), flag
+		return &token.Hash{Value: s.scanName(), Type: typ, Pos: pos}
 	}
+	s.unread(1)
 
 	// If there is no name following the hash symbol then return delim-token.
-	s.unread(1)
-	return DELIM, "#", ""
-}
-
-// scanSuffixMatch consumes a suffix-match token.
-func (s *Scanner) scanSuffixMatch() (TokenType, string) {
-	if next := s.read(); next == '=' {
-		return SUFFIXMATCH, ""
-	}
-	s.unread(1)
-	return DELIM, "$"
-}
-
-// scanSubstringMatch consumes a substring-match token.
-func (s *Scanner) scanSubstringMatch() (TokenType, string) {
-	if next := s.read(); next == '=' {
-		return SUBSTRINGMATCH, ""
-	}
-	s.unread(1)
-	return DELIM, "*"
-}
-
-// scanPrefixMatch consumes a prefix-match token.
-func (s *Scanner) scanPrefixMatch() (TokenType, string) {
-	if next := s.read(); next == '=' {
-		return PREFIXMATCH, ""
-	}
-	s.unread(1)
-	return DELIM, "^"
-}
-
-// scanIncludeMatch consumes an include-match token.
-func (s *Scanner) scanIncludeMatch() (TokenType, string) {
-	if next := s.read(); next == '=' {
-		return INCLUDEMATCH, ""
-	}
-	s.unread(1)
-	return DELIM, "~"
+	return &token.Delim{Value: "#", Pos: pos}
 }
 
 // scanName consumes a name.
@@ -421,27 +387,28 @@ func (s *Scanner) scanName() string {
 
 // scanIdent consumes a ident-like token.
 // This function can return an ident, function, url, or bad-url.
-func (s *Scanner) scanIdent() (TokenType, string) {
+func (s *Scanner) scanIdent() token.Token {
+	pos := s.Pos()
 	v := s.scanName()
 
 	// Check if this is the start of a url token.
 	if strings.ToLower(v) == "url" {
 		if ch := s.read(); ch == '(' {
-			return s.scanURL()
+			return s.scanURL(pos)
 		}
 		s.unread(1)
 	} else if ch := s.read(); ch == '(' {
-		return FUNCTION, v
+		return &token.Function{Value: v, Pos: pos}
 	}
 	s.unread(1)
 
-	return IDENT, v
+	return &token.Ident{Value: v, Pos: pos}
 }
 
 // scanURL consumes the contents of a URL function.
 // This function assumes that the "url(" has just been consumed.
 // This function can return a url or bad-url token.
-func (s *Scanner) scanURL() (TokenType, string) {
+func (s *Scanner) scanURL(pos token.Pos) token.Token {
 	// Consume all whitespace after the "(".
 	if ch := s.read(); isWhitespace(ch) {
 		s.scanWhitespace()
@@ -453,7 +420,7 @@ func (s *Scanner) scanURL() (TokenType, string) {
 	// If it starts with a single or double quote then consume a string and
 	// use the string's value as the URL.
 	if ch := s.read(); ch == eof {
-		return URL, ""
+		return &token.URL{Pos: pos}
 	} else if ch == '"' || ch == '\'' {
 		// Scan the string as the value.
 		tok := s.scanString()
@@ -465,7 +432,7 @@ func (s *Scanner) scanURL() (TokenType, string) {
 			value = tok.Value
 		case *token.BadString:
 			s.scanBadURL()
-			return BADURL, ""
+			return &token.BadURL{Pos: pos}
 		}
 
 		// Scan whitespace after the string.
@@ -477,9 +444,9 @@ func (s *Scanner) scanURL() (TokenType, string) {
 		// Scan right parenthesis.
 		if ch := s.read(); ch != ')' && ch != eof {
 			s.scanBadURL()
-			return BADURL, ""
+			return &token.BadURL{Pos: pos}
 		}
-		return URL, value
+		return &token.URL{Value: value, Pos: pos}
 	}
 	s.unread(1)
 
@@ -489,26 +456,26 @@ func (s *Scanner) scanURL() (TokenType, string) {
 	for {
 		ch := s.read()
 		if ch == ')' || ch == eof {
-			return URL, buf.String()
+			return &token.URL{Value: buf.String(), Pos: pos}
 		} else if isWhitespace(ch) {
 			s.scanWhitespace()
 			if ch0 := s.read(); ch0 == ')' || ch0 == eof {
-				return URL, buf.String()
+				return &token.URL{Value: buf.String(), Pos: pos}
 			} else {
 				s.scanBadURL()
-				return BADURL, ""
+				return &token.BadURL{Pos: pos}
 			}
 		} else if ch == '"' || ch == '\'' || ch == '(' || isNonPrintable(ch) {
-			s.Errors = append(s.Errors, &Error{Message: fmt.Sprintf("invalid url code point: %c (%U)", ch, ch), Pos: s.pos})
+			s.Errors = append(s.Errors, &Error{Message: fmt.Sprintf("invalid url code point: %c (%U)", ch, ch), Pos: pos})
 			s.scanBadURL()
-			return BADURL, ""
+			return &token.BadURL{Pos: pos}
 		} else if ch == '\\' {
 			if s.peekEscape() {
 				_, _ = buf.WriteRune(s.scanEscape())
 			} else {
-				s.Errors = append(s.Errors, &Error{Message: "unescaped \\ in url", Pos: s.pos})
+				s.Errors = append(s.Errors, &Error{Message: "unescaped \\ in url", Pos: s.Pos()})
 				s.scanBadURL()
-				return BADURL, ""
+				return &token.BadURL{Pos: pos}
 			}
 		} else {
 			_, _ = buf.WriteRune(ch)
@@ -531,8 +498,12 @@ func (s *Scanner) scanBadURL() {
 }
 
 // scanUnicodeRange consumes a unicode-range token.
-func (s *Scanner) scanUnicodeRange() (start, end int) {
+func (s *Scanner) scanUnicodeRange() token.Token {
 	var buf bytes.Buffer
+
+	// Move the position back one since the "U" is already consumed.
+	pos := s.Pos()
+	pos.Char--
 
 	// Consume up to 6 hex digits first.
 	for i := 0; i < 6; i++ {
@@ -561,13 +532,11 @@ func (s *Scanner) scanUnicodeRange() (start, end int) {
 	if buf.Len() > n {
 		start64, _ := strconv.ParseInt(strings.Replace(buf.String(), "?", "0", -1), 16, 0)
 		end64, _ := strconv.ParseInt(strings.Replace(buf.String(), "?", "F", -1), 16, 0)
-		start, end = int(start64), int(end64)
-		return
+		return &token.UnicodeRange{Start: int(start64), End: int(end64), Pos: pos}
 	}
 
 	// Otherwise calculate this token is the start of the range.
 	start64, _ := strconv.ParseInt(buf.String(), 16, 0)
-	start = int(start64)
 
 	// If the next two code points are a "-" and a hex digit then consume the end.
 	ch1, ch2 := s.read(), s.read()
@@ -585,14 +554,12 @@ func (s *Scanner) scanUnicodeRange() (start, end int) {
 			}
 		}
 		end64, _ := strconv.ParseInt(buf.String(), 16, 0)
-		end = int(end64)
-		return
+		return &token.UnicodeRange{Start: int(start64), End: int(end64), Pos: pos}
 	}
 	s.unread(2)
 
 	// Otherwise set the end value to the start value.
-	end = start
-	return
+	return &token.UnicodeRange{Start: int(start64), End: int(start64), Pos: pos}
 }
 
 // scanEscape consumes an escaped code point.
@@ -662,6 +629,7 @@ func (s *Scanner) read() rune {
 
 	// Otherwise read from the reader.
 	ch, _, err := s.rd.ReadRune()
+	pos := s.Pos()
 	if err != nil {
 		ch = eof
 	} else {
@@ -687,16 +655,17 @@ func (s *Scanner) read() rune {
 
 		// Track scanner position.
 		if ch == '\n' {
-			s.pos.Line++
-			s.pos.Char = 0
+			pos.Line++
+			pos.Char = 0
 		} else {
-			s.pos.Char++
+			pos.Char++
 		}
 	}
 
 	// Add to circular buffer.
 	s.bufi = ((s.bufi + 1) % len(s.buf))
 	s.buf[s.bufi] = ch
+	s.bufpos[s.bufi] = pos
 	return ch
 }
 
@@ -711,6 +680,11 @@ func (s *Scanner) unread(n int) {
 // curr reads the current code point.
 func (s *Scanner) curr() rune {
 	return s.buf[s.bufi]
+}
+
+// Pos reads the current position of the scanner.
+func (s *Scanner) Pos() token.Pos {
+	return s.bufpos[s.bufi]
 }
 
 // isWhitespace returns true if the rune is a space, tab, or newline.
