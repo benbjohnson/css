@@ -86,12 +86,17 @@ type Declarations []Node
 
 // Declaration represents a name/value pair.
 type Declaration struct {
-	Name   string
-	Values ComponentValues
+	Name      string
+	Values    ComponentValues
+	Important bool
 }
 
 func (d *Declaration) String() string {
-	return d.Name + ": " + d.Values.String()
+	s := d.Name + ":" + d.Values.String()
+	if d.Important {
+		s += "!important"
+	}
+	return s
 }
 
 // ComponentValues represents a list of component values.
@@ -103,6 +108,20 @@ func (a ComponentValues) String() string {
 		buf.WriteString(v.String())
 	}
 	return buf.String()
+}
+
+// NonWhitespace returns the list of values without whitespace characters.
+func (a ComponentValues) NonWhitespace() ComponentValues {
+	var tmp ComponentValues
+	for _, v := range a {
+		if v, ok := a.(*Token); ok {
+			if _, ok := v.(*token.Whitespace); ok {
+				continue
+			}
+		}
+		tmp = append(tmp, v)
+	}
+	return tmp
 }
 
 // ComponentValue represents a component value.

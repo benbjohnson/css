@@ -41,11 +41,25 @@ func ParseRule(s Scanner) (ast.Rule, error) {
 
 // ParseDeclaration parses a name/value declaration.
 func ParseDeclaration(s Scanner) (*ast.Declaration, error) {
-	// TODO(benbjohnson): Consume next input token.
-	// TODO(benbjohnson): While current token is whitespace, consume.
-	// TODO(benbjohnson): If current token is not ident, return syntax error.
-	// TODO(benbjohnson): Consume a declaration. If nothing is returned, return syntax error.
-	return nil, nil
+	var p parser
+
+	// Skip over initial whitespace.
+	p.skipWhitespace(s)
+
+	// If the next token is not an ident then return an error.
+	if _, ok := s.Scan().(*token.Ident); !ok {
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %q", s.Current().String()), Pos: s.Current().Position()})
+		return nil, p.error()
+	}
+	s.Unscan()
+
+	// Consume a declaration. If nothing is returned, return syntax error.
+	d := p.consumeDeclaration(s)
+	if d == nil {
+		p.errors = append(p.errors, &Error{Message: "expected declaration", Pos: s.Current().Position()})
+	}
+
+	return d, p.error()
 }
 
 // ParseDeclarations parses a list of declarations and at-rules.
@@ -244,8 +258,8 @@ func (p *parser) consumeDeclaration(s Scanner) *ast.Declaration {
 	p.skipWhitespace(s)
 
 	// The next token must be a colon.
-	if tok, ok := s.Scan().(*token.Colon); !ok {
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected colon, got %s", tok.String()), Pos: tok.Pos})
+	if _, ok := s.Scan().(*token.Colon); !ok {
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected colon, got %s", s.Current().String()), Pos: s.Current().Position()})
 		return nil
 	}
 
@@ -258,9 +272,16 @@ func (p *parser) consumeDeclaration(s Scanner) *ast.Declaration {
 		d.Values = append(d.Values, &ast.Token{tok})
 	}
 
-	// TODO(benbjohnson): Check last two non-whitespace tokens for "!important".
+	// Check last two non-whitespace tokens for "!important".
+	d.Values, d.Important = cleanImportantFlag(d.Values)
 
 	return d
+}
+
+// Checks if the last two non-whitespace tokens are a case-insensitive "!important".
+// If so, it removes them and returns the "important" flag set to true.
+func cleanImportantFlag(values ast.ComponentValues) (ast.ComponentValues, bool) {
+	return values, false // TODO(benbjohnson)
 }
 
 // consumeComponentValue consumes a single component value. (§5.4.6)
@@ -409,37 +430,6 @@ func (s *TokenScanner) Unscan() {
 		s.i--
 	}
 }
-
-/*
-// scan reads the next token from the scanner.
-func (p *parser) scan() *Token {
-	// If we have tokens on our internal lookahead buffer then return those.
-	if p.bufn > 0 {
-		p.bufi = ((p.bufi + 1) % len(p.buf))
-		p.bufn--
-		return p.buf[p.bufi]
-	}
-
-	// Otherwise read from the scanner.
-	tok := p.scanner.Scan()
-
-	// Add to circular buffer.
-	p.bufi = ((p.bufi + 1) % len(p.buf))
-	p.buf[p.bufi] = tok
-	return tok
-}
-
-// unscan adds the previous token back onto the buffer.
-func (p *Scanner) unscan() {
-	p.bufi = ((p.bufi + len(p.buf) - 1) % len(p.buf))
-	p.bufn++
-}
-
-// curr reads the current token.
-func (p *parser) curr() *Token {
-	return p.buf[p.bufi]
-}
-*/
 
 // Error represents a syntax error.
 type Error struct {

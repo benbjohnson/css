@@ -8,6 +8,33 @@ import (
 	"github.com/benbjohnson/css/scanner"
 )
 
+// Ensure that a declaration can be parsed into an AST.
+func TestParseDeclaration(t *testing.T) {
+	var tests = []struct {
+		s   string
+		v   string
+		err string
+	}{
+		{s: `foo: bar`, v: `foo: bar`},
+
+		//{s: ``, err: `unexpected EOF`},
+		//{s: ` foo bar`, err: `expected EOF, got "bar"`},
+	}
+
+	for i, tt := range tests {
+		v, err := parser.ParseDeclaration(scanner.New(strings.NewReader(tt.s)))
+		if tt.err != "" || errstring(err) != "" {
+			if tt.err != errstring(err) {
+				t.Errorf("%d. <%q> error: exp=%q, got=%q", i, tt.s, tt.err, errstring(err))
+			}
+		} else if v == nil {
+			t.Errorf("%d. <%q> expected value", i, tt.s)
+		} else if v.String() != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, v.String())
+		}
+	}
+}
+
 // Ensure that component values can be parsed into the correct AST.
 func TestParseComponentValue(t *testing.T) {
 	var tests = []struct {
