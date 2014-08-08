@@ -44,6 +44,31 @@ func TestParseComponentValue(t *testing.T) {
 	}
 }
 
+// Ensure that a list of component values can be parsed into the correct AST.
+func TestParseComponentValues(t *testing.T) {
+	var tests = []struct {
+		s   string
+		v   string
+		err string
+	}{
+		{s: `foo bar`, v: `foo bar`},
+		{s: `foo func(bar) { baz }`, v: `foo func(bar) { baz }`},
+	}
+
+	for i, tt := range tests {
+		v, err := parser.ParseComponentValues(scanner.New(strings.NewReader(tt.s)))
+		if tt.err != "" || errstring(err) != "" {
+			if tt.err != errstring(err) {
+				t.Errorf("%d. <%q> error: exp=%q, got=%q", i, tt.s, tt.err, errstring(err))
+			}
+		} else if v == nil {
+			t.Errorf("%d. <%q> expected value", i, tt.s)
+		} else if v.String() != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, v.String())
+		}
+	}
+}
+
 // errstring returns the string representation of the error.
 func errstring(err error) string {
 	if err != nil {

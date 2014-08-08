@@ -90,8 +90,25 @@ func ParseComponentValue(s Scanner) (ast.ComponentValue, error) {
 
 // ParseComponentValues parses a list of component values.
 func ParseComponentValues(s Scanner) (ast.ComponentValues, error) {
-	// TODO(benbjohnson): Repeatedly consume a component value until EOF.
-	return nil, nil
+	var a ast.ComponentValues
+
+	// Repeatedly consume a component value until EOF.
+	var p parser
+	for {
+		v := p.consumeComponentValue(s)
+
+		// If the value is an EOF, then exit.
+		if v, ok := v.(*ast.Token); ok {
+			if _, ok := v.Token.(*token.EOF); ok {
+				break
+			}
+		}
+
+		// Otherwise append to list of component values.
+		a = append(a, v)
+	}
+
+	return a, nil
 }
 
 // Errors returns the error on the parser.
