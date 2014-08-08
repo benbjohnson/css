@@ -25,6 +25,9 @@ type Scanner struct {
 	rd  io.RuneReader
 	pos token.Pos
 
+	tokbuf  token.Token // last token read from the scanner.
+	tokbufn bool        // whether the token buffer is in use.
+
 	buf    [4]rune      // circular buffer for runes
 	bufpos [4]token.Pos // circular buffer for position
 	bufi   int          // circular buffer index
@@ -38,14 +41,28 @@ func New(r io.Reader) *Scanner {
 	}
 }
 
+// Scan returns the next token from the reader.
 func (s *Scanner) Scan() token.Token {
+	// If unscan was the last call then return the previous token again.
+	if s.tokbufn {
+		s.tokbufn = false
+		return s.tokbuf
+	}
+
+	// Otherwise read from the reader and save the token.
+	tok := s.scan()
+	s.tokbuf = tok
+	return tok
+}
+
+func (s *Scanner) scan() token.Token {
 	for {
 		// Read next code point.
 		ch := s.read()
 		pos := s.Pos()
 
 		if ch == eof {
-			return &token.EOF{}
+			return &token.EOF{Pos: pos}
 		} else if isWhitespace(ch) {
 			return s.scanWhitespace()
 		} else if ch == '"' || ch == '\'' {
@@ -177,6 +194,16 @@ func (s *Scanner) Scan() token.Token {
 		}
 		return &token.Delim{Value: string(ch), Pos: pos}
 	}
+}
+
+// Unscan buffers the previous scan.
+func (s *Scanner) Unscan() {
+	s.tokbufn = true
+}
+
+// Current returns the current token.
+func (s *Scanner) Current() token.Token {
+	return s.tokbuf
 }
 
 // scanWhitespace consumes the current code point and all subsequent whitespace.
