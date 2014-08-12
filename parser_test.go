@@ -1,11 +1,10 @@
-package parser_test
+package css_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/benbjohnson/css/parser"
-	"github.com/benbjohnson/css/scanner"
+	"github.com/benbjohnson/css"
 )
 
 // Ensure that a declaration can be parsed into an AST.
@@ -22,15 +21,15 @@ func TestParseDeclaration(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		v, err := parser.ParseDeclaration(scanner.New(strings.NewReader(tt.s)))
+		v, err := css.ParseDeclaration(css.NewTokenizer(strings.NewReader(tt.s)))
 		if tt.err != "" || errstring(err) != "" {
 			if tt.err != errstring(err) {
 				t.Errorf("%d. <%q> error: exp=%q, got=%q", i, tt.s, tt.err, errstring(err))
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if v.String() != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, v.String())
+		} else if css.Print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
 		}
 	}
 }
@@ -54,19 +53,19 @@ func TestParseComponentValue(t *testing.T) {
 		{s: ` fun("hello"`, v: `fun("hello")`},
 
 		{s: ``, err: `unexpected EOF`},
-		{s: ` foo bar`, err: `expected EOF, got "bar"`},
+		{s: ` foo bar`, err: `expected EOF, got bar`},
 	}
 
 	for i, tt := range tests {
-		v, err := parser.ParseComponentValue(scanner.New(strings.NewReader(tt.s)))
+		v, err := css.ParseComponentValue(css.NewTokenizer(strings.NewReader(tt.s)))
 		if tt.err != "" || errstring(err) != "" {
 			if tt.err != errstring(err) {
 				t.Errorf("%d. <%q> error: exp=%q, got=%q", i, tt.s, tt.err, errstring(err))
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if v.String() != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, v.String())
+		} else if css.Print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
 		}
 	}
 }
@@ -83,15 +82,15 @@ func TestParseComponentValues(t *testing.T) {
 	}
 
 	for i, tt := range tests {
-		v, err := parser.ParseComponentValues(scanner.New(strings.NewReader(tt.s)))
+		v, err := css.ParseComponentValues(css.NewTokenizer(strings.NewReader(tt.s)))
 		if tt.err != "" || errstring(err) != "" {
 			if tt.err != errstring(err) {
 				t.Errorf("%d. <%q> error: exp=%q, got=%q", i, tt.s, tt.err, errstring(err))
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if v.String() != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, v.String())
+		} else if css.Print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
 		}
 	}
 }
