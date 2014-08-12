@@ -1,6 +1,7 @@
 package css_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -28,8 +29,8 @@ func TestParseDeclaration(t *testing.T) {
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if css.Print(v) != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
+		} else if print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, print(v))
 		}
 	}
 }
@@ -64,8 +65,8 @@ func TestParseComponentValue(t *testing.T) {
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if css.Print(v) != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
+		} else if print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, print(v))
 		}
 	}
 }
@@ -89,8 +90,8 @@ func TestParseComponentValues(t *testing.T) {
 			}
 		} else if v == nil {
 			t.Errorf("%d. <%q> expected value", i, tt.s)
-		} else if css.Print(v) != tt.v {
-			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, css.Print(v))
+		} else if print(v) != tt.v {
+			t.Errorf("%d. <%q>\n\nexp: %s\n\ngot: %s", i, tt.s, tt.v, print(v))
 		}
 	}
 }
@@ -101,4 +102,12 @@ func errstring(err error) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// print pretty prints an AST node to a string using the default configuration.
+func print(n css.Node) string {
+	var buf bytes.Buffer
+	var p css.Printer
+	_ = p.Fprint(&buf, n)
+	return buf.String()
 }

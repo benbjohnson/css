@@ -45,7 +45,7 @@ func ParseDeclaration(s Scanner) (*Declaration, error) {
 
 	// If the next token is not an ident then return an error.
 	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != IdentToken {
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %s", Print(s.Current())), Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil, p.error()
 	}
 	s.Unscan()
@@ -92,7 +92,7 @@ func ParseComponentValue(s Scanner) (ComponentValue, error) {
 	// If we're not at EOF then return a syntax error.
 	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != EOFToken {
 		s.Unscan()
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", Print(s.Current())), Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil, p.error()
 	}
 
@@ -257,7 +257,7 @@ func (p *parser) consumeDeclarations(s Scanner) Declarations {
 		}
 
 		// Any other token is a syntax error.
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("unexpected: %s", Print(tok)), Pos: Position(tok)})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("unexpected: %s", print(tok)), Pos: Position(tok)})
 
 		// Repeatedly consume a component values until semicolon or EOF.
 		p.skipComponentValues(s)
@@ -276,7 +276,7 @@ func (p *parser) consumeDeclaration(s Scanner) *Declaration {
 
 	// The next token must be a colon.
 	if tok := s.Scan().(*Token); tok.Tok != ColonToken {
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected colon, got %s", Print(s.Current())), Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected colon, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil
 	}
 

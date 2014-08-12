@@ -138,14 +138,8 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 	return
 }
 
-// Fprint pretty prints an AST node to a writer using the default configuration.
-func Fprint(w io.Writer, n Node) error {
-	var p Printer
-	return p.Fprint(w, n)
-}
-
-// Print pretty prints an AST node to a string using the default configuration.
-func Print(n Node) string {
+// print pretty prints an AST node to a string using the default configuration.
+func print(n Node) string {
 	var p Printer
 	var buf bytes.Buffer
 	_ = p.Fprint(&buf, n)
