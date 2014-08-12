@@ -22,8 +22,7 @@ type Tokenizer struct {
 	// Errors contains a list of all errors that occur during scanning.
 	Errors []*Error
 
-	rd  io.RuneReader
-	pos Pos
+	rd io.RuneReader
 
 	tokbuf  *Token // last token read from the tokenizer.
 	tokbufn bool   // whether the token buffer is in use.
@@ -59,7 +58,7 @@ func (t *Tokenizer) scan() *Token {
 	for {
 		// Read next code point.
 		ch := t.read()
-		pos := t.Pos()
+		pos := t.pos()
 
 		if ch == eof {
 			return &Token{Tok: EOFToken, Pos: pos}
@@ -163,7 +162,7 @@ func (t *Tokenizer) scan() *Token {
 				return t.scanIdent()
 			}
 			// Otherwise this is a parse error but continue on as a DELIM.
-			t.Errors = append(t.Errors, &Error{Message: "unescaped \\", Pos: t.Pos()})
+			t.Errors = append(t.Errors, &Error{Message: "unescaped \\", Pos: t.pos()})
 			return &Token{Tok: DelimToken, Value: "\\", Pos: pos}
 		} else if ch == '+' || ch == '.' || isDigit(ch) {
 			t.unread(1)
@@ -208,7 +207,7 @@ func (t *Tokenizer) Current() ComponentValue {
 
 // scanWhitespace consumes the current code point and all subsequent whitespace.
 func (t *Tokenizer) scanWhitespace() *Token {
-	pos := t.Pos()
+	pos := t.pos()
 	var buf bytes.Buffer
 	_, _ = buf.WriteRune(t.curr())
 	for {
@@ -232,7 +231,7 @@ func (t *Tokenizer) scanWhitespace() *Token {
 // An EOF closes out a string but does not return an error.
 // A newline will close a string and returns a bad-string token.
 func (t *Tokenizer) scanString() *Token {
-	pos, ending := t.Pos(), t.curr()
+	pos, ending := t.pos(), t.curr()
 	var buf bytes.Buffer
 	for {
 		ch := t.read()
@@ -377,7 +376,7 @@ func (t *Tokenizer) scanComment() {
 // It will return a delim token otherwise.
 // Hash tokens' type flag is set to "id" if its value is an identifier.
 func (t *Tokenizer) scanHash() *Token {
-	pos := t.Pos()
+	pos := t.pos()
 
 	// If there is a name following the hash then we have a hash token.
 	if ch := t.read(); isName(ch) || t.peekEscape() {
@@ -415,7 +414,7 @@ func (t *Tokenizer) scanName() string {
 // scanIdent consumes a ident-like token.
 // This function can return an ident, function, url, or bad-url.
 func (t *Tokenizer) scanIdent() *Token {
-	pos := t.Pos()
+	pos := t.pos()
 	v := t.scanName()
 
 	// Check if this is the start of a url token.
@@ -499,7 +498,7 @@ func (t *Tokenizer) scanURL(pos Pos) *Token {
 			if t.peekEscape() {
 				_, _ = buf.WriteRune(t.scanEscape())
 			} else {
-				t.Errors = append(t.Errors, &Error{Message: "unescaped \\ in url", Pos: t.Pos()})
+				t.Errors = append(t.Errors, &Error{Message: "unescaped \\ in url", Pos: t.pos()})
 				t.scanBadURL()
 				return &Token{Tok: BadURLToken, Pos: pos}
 			}
@@ -528,7 +527,7 @@ func (t *Tokenizer) scanUnicodeRange() *Token {
 	var buf bytes.Buffer
 
 	// Move the position back one since the "U" is already consumed.
-	pos := t.Pos()
+	pos := t.pos()
 	pos.Char--
 
 	// Consume up to 6 hex digits first.
@@ -655,7 +654,7 @@ func (t *Tokenizer) read() rune {
 
 	// Otherwise read from the reader.
 	ch, _, err := t.rd.ReadRune()
-	pos := t.Pos()
+	pos := t.pos()
 	if err != nil {
 		ch = eof
 	} else {
@@ -709,7 +708,7 @@ func (t *Tokenizer) curr() rune {
 }
 
 // Pos reads the current position of the scanner.
-func (t *Tokenizer) Pos() Pos {
+func (t *Tokenizer) pos() Pos {
 	return t.bufpos[t.bufi]
 }
 
