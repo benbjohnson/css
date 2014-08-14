@@ -6,6 +6,8 @@ import (
 	"io"
 )
 
+// TODO(benbjohnson): Add whitespace trimming to printer.
+
 // Printer represents a configurable CSS printer.
 type Printer struct{}
 
