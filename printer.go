@@ -21,11 +21,9 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 		_, _ = w.Write([]byte{'@'})
 		_, _ = w.Write([]byte(n.Name))
 		if len(n.Prelude) > 0 {
-			_, _ = w.Write([]byte{' '})
 			_ = p.Fprint(w, n.Prelude)
 		}
 		if n.Block != nil {
-			_, _ = w.Write([]byte{' '})
 			err = p.Fprint(w, n.Block)
 		} else {
 			_, err = w.Write([]byte{';'})
@@ -33,7 +31,6 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 
 	case *QualifiedRule:
 		_ = p.Fprint(w, n.Prelude)
-		_, _ = w.Write([]byte{' '})
 		err = p.Fprint(w, n.Block)
 
 	case *Declaration:
@@ -41,7 +38,16 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 		_, _ = w.Write([]byte{':'})
 		err = p.Fprint(w, n.Values)
 		if n.Important {
-			_, err = w.Write([]byte("!important"))
+			_, err = w.Write([]byte(" !important"))
+		}
+
+	case Declarations:
+		for i, v := range n {
+			if i > 0 {
+				_, _ = w.Write([]byte{' '})
+			}
+			_ = p.Fprint(w, v)
+			_, err = w.Write([]byte{';'})
 		}
 
 	case ComponentValues:
@@ -132,6 +138,8 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 			_, err = w.Write([]byte{'{'})
 		case RBraceToken:
 			_, err = w.Write([]byte{'}'})
+		case EOFToken:
+			_, err = w.Write([]byte("EOF"))
 		}
 	}
 

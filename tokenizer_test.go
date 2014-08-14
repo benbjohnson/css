@@ -55,6 +55,8 @@ func TestTokenizer_Scan(t *testing.T) {
 		{s: `-100`, tok: &css.Token{Tok: css.NumberToken, Type: "integer", Value: `-100`, Number: -100, Pos: css.Pos{1, 0}}},
 		{s: `-1.0`, tok: &css.Token{Tok: css.NumberToken, Type: "number", Value: `-1.0`, Number: -1, Pos: css.Pos{1, 0}}},
 		{s: `-`, tok: &css.Token{Tok: css.DelimToken, Value: `-`, Pos: css.Pos{1, 0}}},
+		{s: `-.`, tok: &css.Token{Tok: css.DelimToken, Value: `-`, Pos: css.Pos{1, 0}}},
+		{s: `.`, tok: &css.Token{Tok: css.DelimToken, Value: `.`, Pos: css.Pos{1, 0}}},
 
 		{s: `url`, tok: &css.Token{Tok: css.IdentToken, Value: `url`, Pos: css.Pos{1, 0}}},
 		{s: `myIdent`, tok: &css.Token{Tok: css.IdentToken, Value: `myIdent`, Pos: css.Pos{1, 0}}},

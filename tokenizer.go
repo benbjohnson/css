@@ -95,21 +95,24 @@ func (t *Tokenizer) scan() *Token {
 		} else if ch == ',' {
 			return &Token{Tok: CommaToken, Pos: pos}
 		} else if ch == '-' {
-			// Scan then next two tokens and unread back to the hyphen.
-			ch1, ch2 := t.read(), t.read()
-			t.unread(3)
-
-			// If we have a digit next, it's a numeric token. If it's an identifier
-			// then scan an identifier, and if it's a "->" then it's a CDC.
-			if isDigit(ch1) || ch1 == '.' {
+			// Check for a number or identifier.
+			if t.peekNumber() {
+				t.unread(1)
 				return t.scanNumeric(pos)
 			} else if t.peekIdent() {
+				t.unread(1)
 				return t.scanIdent()
-			} else if ch1 == '-' && ch2 == '>' {
-				return &Token{Tok: CDCToken, Pos: pos}
-			} else {
-				return &Token{Tok: DelimToken, Value: "-", Pos: pos}
 			}
+
+			// Scan next two code points to see if we have a CDC (-->).
+			ch1, ch2 := t.read(), t.read()
+			if ch1 == '-' && ch2 == '>' {
+				return &Token{Tok: CDCToken, Pos: pos}
+			}
+			t.unread(2)
+
+			// Otherwise return the hyphen by itself.
+			return &Token{Tok: DelimToken, Value: "-", Pos: pos}
 		} else if ch == '/' {
 			// Comments are ignored by the scanner so restart the loop from
 			// the end of the comment and get the next token.
@@ -164,9 +167,15 @@ func (t *Tokenizer) scan() *Token {
 			// Otherwise this is a parse error but continue on as a DELIM.
 			t.Errors = append(t.Errors, &Error{Message: "unescaped \\", Pos: t.pos()})
 			return &Token{Tok: DelimToken, Value: "\\", Pos: pos}
-		} else if ch == '+' || ch == '.' || isDigit(ch) {
+		} else if isDigit(ch) {
 			t.unread(1)
 			return t.scanNumeric(pos)
+		} else if ch == '+' || ch == '.' {
+			if t.peekNumber() {
+				t.unread(1)
+				return t.scanNumeric(pos)
+			}
+			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
 		} else if ch == 'u' || ch == 'U' {
 			// Peek "+[0-9a-f]" or "+?", consume next code point, consume unicode-range.
 			ch1, ch2 := t.read(), t.read()
@@ -636,6 +645,30 @@ func (t *Tokenizer) peekIdent() bool {
 	} else if t.curr() == '\\' && t.peekEscape() {
 		return true
 	}
+	return false
+}
+
+// peekNumber checks if the next code points are a valid number.
+func (t *Tokenizer) peekNumber() bool {
+	// If this is a plus or minus followed by a digit or a dot+digit, return true.
+	// If this is a dot followed by a digit then return true.
+	switch t.curr() {
+	case '+', '-':
+		ch0, ch1 := t.read(), t.read()
+		t.unread(2)
+		return isDigit(ch0) || (ch0 == '.' && isDigit(ch1))
+	case '.':
+		ch0 := t.read()
+		t.unread(1)
+		return isDigit(ch0)
+	}
+
+	// If the current code point is a digit then return true.
+	if isDigit(t.curr()) {
+		return true
+	}
+
+	// Anything else is not a number.
 	return false
 }
 

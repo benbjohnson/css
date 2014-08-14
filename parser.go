@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"strings"
 )
 
 // parser represents a CSS3 parser.
@@ -26,14 +27,35 @@ func ParseRules(s Scanner) (Rules, error) {
 
 // ParseRule parses a qualified rule or at-rule.
 func ParseRule(s Scanner) (Rule, error) {
-	// TODO(benbjohnson): Consume the next input token.
-	// TODO(benbjohnson): While the current token is whitespace, consume.
-	// TODO(benbjohnson): If the current token is EOF, return syntax error.
-	// TODO(benbjohnson): If the current token is at-keyword, consume at-rule.
-	// TODO(benbjohnson): Otherwise consume a qualified rule. If nothing is returned, return syntax error.
-	// TODO(benbjohnson): While current token is whitespace, consume.
-	// TODO(benbjohnson): If current token is EOF, return rule. Otherwise return syntax error.
-	return nil, nil
+	var p parser
+	var r Rule
+
+	// Skip over initial whitespace.
+	p.skipWhitespace(s)
+
+	// If the next token is EOF, return syntax error.
+	// If the next token is at-keyword, consume an at-rule.
+	// Otherwise consume a qualified rule. If nothing is returned, return error.
+	value := s.Scan()
+	if tok, ok := value.(*Token); ok && tok.Tok == EOFToken {
+		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.Current())})
+		return nil, p.error()
+	} else if ok && tok.Tok == AtKeywordToken {
+		r = p.consumeAtRule(s)
+	} else {
+		s.Unscan()
+		r = p.consumeQualifiedRule(s)
+	}
+
+	// Skip over trailing whitespace.
+	p.skipWhitespace(s)
+
+	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != EOFToken {
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
+		return nil, p.error()
+	}
+
+	return r, p.error()
 }
 
 // ParseDeclaration parses a name/value declaration.
@@ -50,19 +72,17 @@ func ParseDeclaration(s Scanner) (*Declaration, error) {
 	}
 	s.Unscan()
 
-	// Consume a declaration. If nothing is returned, return syntax error.
+	// Consume a declaration.
 	d := p.consumeDeclaration(s)
-	if d == nil {
-		p.errors = append(p.errors, &Error{Message: "expected declaration", Pos: Position(s.Current())})
-	}
 
 	return d, p.error()
 }
 
 // ParseDeclarations parses a list of declarations and at-rules.
-func ParseDeclarations(s Scanner) (*Declaration, error) {
-	// TODO(benbjohnson): Consume a list of declarations.
-	return nil, nil
+func ParseDeclarations(s Scanner) (Declarations, error) {
+	var p parser
+	a := p.consumeDeclarations(s)
+	return a, p.error()
 }
 
 // ParseComponentValue parses a component value.
@@ -81,10 +101,6 @@ func ParseComponentValue(s Scanner) (ComponentValue, error) {
 
 	// Consume component value.
 	v := p.consumeComponentValue(s)
-	if v == nil {
-		p.errors = append(p.errors, &Error{Message: "expected component value", Pos: Position(s.Current())})
-		return nil, p.error()
-	}
 
 	// Skip over any trailing whitespace.
 	p.skipWhitespace(s)
@@ -149,16 +165,17 @@ func (p *parser) consumeRules(s Scanner, toplevel bool) Rules {
 					}
 				}
 			case AtKeywordToken:
-				s.Unscan()
 				if r := p.consumeAtRule(s); r != nil {
 					a = append(a, r)
 				}
 			default:
+				s.Unscan()
 				if r := p.consumeQualifiedRule(s); r != nil {
 					a = append(a, r)
 				}
 			}
 		default:
+			s.Unscan()
 			if r := p.consumeQualifiedRule(s); r != nil {
 				a = append(a, r)
 			}
@@ -298,7 +315,28 @@ func (p *parser) consumeDeclaration(s Scanner) *Declaration {
 // Checks if the last two non-whitespace tokens are a case-insensitive "!important".
 // If so, it removes them and returns the "important" flag set to true.
 func cleanImportantFlag(values ComponentValues) (ComponentValues, bool) {
-	return values, false // TODO(benbjohnson)
+	a := values.nonwhitespace()
+	if len(a) < 2 {
+		return values, false
+	}
+
+	// Check last two tokens for "!important".
+	if tok, ok := a[len(a)-2].(*Token); !ok || tok.Tok != DelimToken || tok.Value != "!" {
+		return values, false
+	}
+	if tok, ok := a[len(a)-1].(*Token); !ok || tok.Tok != IdentToken || strings.ToLower(tok.Value) != "important" {
+		return values, false
+	}
+
+	// Trim "!important" tokens off values.
+	for i, v := range values {
+		if v == a[len(a)-2] {
+			values = values[i:]
+			break
+		}
+	}
+
+	return values, true
 }
 
 // consumeComponentValue consumes a single component value. (§5.4.6)
@@ -423,12 +461,12 @@ type ComponentValueScanner struct {
 
 // NewComponentValueScanner returns a new instance of ComponentValueScanner.
 func NewComponentValueScanner(a ComponentValues) *ComponentValueScanner {
-	return &ComponentValueScanner{values: a}
+	return &ComponentValueScanner{i: -1, values: a}
 }
 
 // Current returns the current component value.
 func (s *ComponentValueScanner) Current() ComponentValue {
-	if s.i > len(s.values) {
+	if s.i >= len(s.values) {
 		return &Token{Tok: EOFToken}
 	}
 	return s.values[s.i]
@@ -436,7 +474,7 @@ func (s *ComponentValueScanner) Current() ComponentValue {
 
 // Scan returns the next component value.
 func (s *ComponentValueScanner) Scan() ComponentValue {
-	if s.i <= len(s.values) {
+	if s.i < len(s.values) {
 		s.i++
 	}
 	return s.Current()
