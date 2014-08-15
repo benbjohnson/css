@@ -200,13 +200,13 @@ func (s *Scanner) scan() *Token {
 	}
 }
 
-// Unscan buffers the previous scan.
-func (s *Scanner) Unscan() {
+// unscan buffers the previous scan.
+func (s *Scanner) unscan() {
 	s.tokbufn = true
 }
 
 // Current returns the current token.
-func (s *Scanner) Current() *Token {
+func (s *Scanner) current() *Token {
 	return s.tokbuf
 }
 
@@ -786,6 +786,6 @@ type scanner struct {
 	*Scanner
 }
 
-func (s *scanner) Current() ComponentValue { return s.Scanner.Current() }
+func (s *scanner) Current() ComponentValue { return s.Scanner.current() }
 func (s *scanner) Scan() ComponentValue    { return s.Scanner.Scan() }
-func (s *scanner) Unscan()                 { s.Scanner.Unscan() }
+func (s *scanner) Unscan()                 { s.Scanner.unscan() }

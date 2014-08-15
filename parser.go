@@ -38,12 +38,12 @@ func ParseRule(s *Scanner) (Rule, error) {
 	// Otherwise consume a qualified rule. If nothing is returned, return error.
 	tok := s.Scan()
 	if tok.Tok == EOFToken {
-		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.current())})
 		return nil, p.error()
 	} else if tok.Tok == AtKeywordToken {
 		r = p.consumeAtRule(&scanner{s})
 	} else {
-		s.Unscan()
+		s.unscan()
 		r = p.consumeQualifiedRule(&scanner{s})
 	}
 
@@ -51,7 +51,7 @@ func ParseRule(s *Scanner) (Rule, error) {
 	p.skipWhitespace(&scanner{s})
 
 	if tok := s.Scan(); tok.Tok != EOFToken {
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.current())), Pos: Position(s.current())})
 		return nil, p.error()
 	}
 
@@ -67,10 +67,10 @@ func ParseDeclaration(s *Scanner) (*Declaration, error) {
 
 	// If the next token is not an ident then return an error.
 	if tok := s.Scan(); tok.Tok != IdentToken {
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %s", print(s.Current())), Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %s", print(s.current())), Pos: Position(s.current())})
 		return nil, p.error()
 	}
-	s.Unscan()
+	s.unscan()
 
 	// Consume a declaration.
 	d := p.consumeDeclaration(&scanner{s})
@@ -94,10 +94,10 @@ func ParseComponentValue(s *Scanner) (ComponentValue, error) {
 
 	// If the next token is EOF then return an error.
 	if tok := s.Scan(); tok.Tok == EOFToken {
-		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.Current())})
+		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.current())})
 		return nil, p.error()
 	}
-	s.Unscan()
+	s.unscan()
 
 	// Consume component value.
 	v := p.consumeComponentValue(&scanner{s})
@@ -107,8 +107,8 @@ func ParseComponentValue(s *Scanner) (ComponentValue, error) {
 
 	// If we're not at EOF then return a syntax error.
 	if tok := s.Scan(); tok.Tok != EOFToken {
-		s.Unscan()
-		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
+		s.unscan()
+		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.current())), Pos: Position(s.current())})
 		return nil, p.error()
 	}
 
