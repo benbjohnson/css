@@ -11,7 +11,9 @@ import (
 // Ensure that a list of rules can be parsed into an AST.
 func TestParseRules(t *testing.T) {
 	var tests = []ParserTest{
-	//{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
+		{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
+		{in: `@import url(/css/screen.css) screen, projection;`, out: `@import url(/css/screen.css) screen, projection;`},
+		{in: `@xxx; foo { padding: 10 0; }`, out: `@xxx; foo { padding: 10 0; }`},
 	}
 
 	for _, tt := range tests {

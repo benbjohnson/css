@@ -19,6 +19,14 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 			_, err = w.Write([]byte{'\n'})
 		}
 
+	case Rules:
+		for i, r := range n {
+			if i > 0 {
+				_, _ = w.Write([]byte{' '})
+			}
+			err = p.Fprint(w, r)
+		}
+
 	case *AtRule:
 		_, _ = w.Write([]byte{'@'})
 		_, _ = w.Write([]byte(n.Name))
