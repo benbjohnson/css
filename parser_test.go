@@ -17,7 +17,7 @@ func TestParseRules(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseRules(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseRules(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }
@@ -35,7 +35,7 @@ func TestParseRule(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseRule(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseRule(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }
@@ -50,7 +50,7 @@ func TestParseDeclaration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseDeclaration(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseDeclaration(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }
@@ -63,7 +63,7 @@ func TestParseDeclarations(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseDeclarations(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseDeclarations(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }
@@ -87,7 +87,7 @@ func TestParseComponentValue(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseComponentValue(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseComponentValue(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }
@@ -100,7 +100,7 @@ func TestParseComponentValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseComponentValues(css.NewTokenizer(strings.NewReader(tt.in)))
+		v, err := css.ParseComponentValues(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, err)
 	}
 }

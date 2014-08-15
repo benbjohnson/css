@@ -11,46 +11,46 @@ type parser struct {
 }
 
 // ParseStyleSheet parses an input stream into a stylesheet.
-func ParseStyleSheet(s Scanner) (*StyleSheet, error) {
+func ParseStyleSheet(s *Scanner) (*StyleSheet, error) {
 	var p parser
 	ss := &StyleSheet{}
-	ss.Rules = p.consumeRules(s, true)
+	ss.Rules = p.consumeRules(&scanner{s}, true)
 	return ss, p.error()
 }
 
 // ParseRule parses a list of rules.
-func ParseRules(s Scanner) (Rules, error) {
+func ParseRules(s *Scanner) (Rules, error) {
 	var p parser
-	a := p.consumeRules(s, false)
+	a := p.consumeRules(&scanner{s}, false)
 	return a, p.error()
 }
 
 // ParseRule parses a qualified rule or at-rule.
-func ParseRule(s Scanner) (Rule, error) {
+func ParseRule(s *Scanner) (Rule, error) {
 	var p parser
 	var r Rule
 
 	// Skip over initial whitespace.
-	p.skipWhitespace(s)
+	p.skipWhitespace(&scanner{s})
 
 	// If the next token is EOF, return syntax error.
 	// If the next token is at-keyword, consume an at-rule.
 	// Otherwise consume a qualified rule. If nothing is returned, return error.
-	value := s.Scan()
-	if tok, ok := value.(*Token); ok && tok.Tok == EOFToken {
+	tok := s.Scan()
+	if tok.Tok == EOFToken {
 		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.Current())})
 		return nil, p.error()
-	} else if ok && tok.Tok == AtKeywordToken {
-		r = p.consumeAtRule(s)
+	} else if tok.Tok == AtKeywordToken {
+		r = p.consumeAtRule(&scanner{s})
 	} else {
 		s.Unscan()
-		r = p.consumeQualifiedRule(s)
+		r = p.consumeQualifiedRule(&scanner{s})
 	}
 
 	// Skip over trailing whitespace.
-	p.skipWhitespace(s)
+	p.skipWhitespace(&scanner{s})
 
-	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != EOFToken {
+	if tok := s.Scan(); tok.Tok != EOFToken {
 		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil, p.error()
 	}
@@ -59,54 +59,54 @@ func ParseRule(s Scanner) (Rule, error) {
 }
 
 // ParseDeclaration parses a name/value declaration.
-func ParseDeclaration(s Scanner) (*Declaration, error) {
+func ParseDeclaration(s *Scanner) (*Declaration, error) {
 	var p parser
 
 	// Skip over initial whitespace.
-	p.skipWhitespace(s)
+	p.skipWhitespace(&scanner{s})
 
 	// If the next token is not an ident then return an error.
-	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != IdentToken {
+	if tok := s.Scan(); tok.Tok != IdentToken {
 		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected ident, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil, p.error()
 	}
 	s.Unscan()
 
 	// Consume a declaration.
-	d := p.consumeDeclaration(s)
+	d := p.consumeDeclaration(&scanner{s})
 
 	return d, p.error()
 }
 
 // ParseDeclarations parses a list of declarations and at-rules.
-func ParseDeclarations(s Scanner) (Declarations, error) {
+func ParseDeclarations(s *Scanner) (Declarations, error) {
 	var p parser
-	a := p.consumeDeclarations(s)
+	a := p.consumeDeclarations(&scanner{s})
 	return a, p.error()
 }
 
 // ParseComponentValue parses a component value.
-func ParseComponentValue(s Scanner) (ComponentValue, error) {
+func ParseComponentValue(s *Scanner) (ComponentValue, error) {
 	var p parser
 
 	// Skip over initial whitespace.
-	p.skipWhitespace(s)
+	p.skipWhitespace(&scanner{s})
 
 	// If the next token is EOF then return an error.
-	if tok, ok := s.Scan().(*Token); ok && tok.Tok == EOFToken {
+	if tok := s.Scan(); tok.Tok == EOFToken {
 		p.errors = append(p.errors, &Error{Message: "unexpected EOF", Pos: Position(s.Current())})
 		return nil, p.error()
 	}
 	s.Unscan()
 
 	// Consume component value.
-	v := p.consumeComponentValue(s)
+	v := p.consumeComponentValue(&scanner{s})
 
 	// Skip over any trailing whitespace.
-	p.skipWhitespace(s)
+	p.skipWhitespace(&scanner{s})
 
 	// If we're not at EOF then return a syntax error.
-	if tok, ok := s.Scan().(*Token); !ok || tok.Tok != EOFToken {
+	if tok := s.Scan(); tok.Tok != EOFToken {
 		s.Unscan()
 		p.errors = append(p.errors, &Error{Message: fmt.Sprintf("expected EOF, got %s", print(s.Current())), Pos: Position(s.Current())})
 		return nil, p.error()
@@ -116,13 +116,13 @@ func ParseComponentValue(s Scanner) (ComponentValue, error) {
 }
 
 // ParseComponentValues parses a list of component values.
-func ParseComponentValues(s Scanner) (ComponentValues, error) {
+func ParseComponentValues(s *Scanner) (ComponentValues, error) {
 	var a ComponentValues
 
 	// Repeatedly consume a component value until EOF.
 	var p parser
 	for {
-		v := p.consumeComponentValue(s)
+		v := p.consumeComponentValue(&scanner{s})
 
 		// If the value is an EOF, then exit.
 		if tok, ok := v.(*Token); ok && tok.Tok == EOFToken {
@@ -146,7 +146,7 @@ func (p *parser) error() error {
 }
 
 // consumeRules consumes a list of rules from a token stream. (§5.4.1)
-func (p *parser) consumeRules(s Scanner, toplevel bool) Rules {
+func (p *parser) consumeRules(s componentValueScanner, toplevel bool) Rules {
 	var a Rules
 	for {
 		tok := s.Scan()
@@ -184,7 +184,7 @@ func (p *parser) consumeRules(s Scanner, toplevel bool) Rules {
 }
 
 // consumeAtRule consumes a single at-rule. (§5.4.2)
-func (p *parser) consumeAtRule(s Scanner) *AtRule {
+func (p *parser) consumeAtRule(s componentValueScanner) *AtRule {
 	r := &AtRule{}
 
 	// Set the name to the value of the current token.
@@ -215,7 +215,7 @@ func (p *parser) consumeAtRule(s Scanner) *AtRule {
 }
 
 // consumeAtRule consumes a single qualified rule. (§5.4.3)
-func (p *parser) consumeQualifiedRule(s Scanner) *QualifiedRule {
+func (p *parser) consumeQualifiedRule(s componentValueScanner) *QualifiedRule {
 	r := &QualifiedRule{}
 
 	// Repeatedly consume the next token.
@@ -243,7 +243,7 @@ func (p *parser) consumeQualifiedRule(s Scanner) *QualifiedRule {
 }
 
 // consumeDeclarations consumes a list of declarations. (§5.4.4)
-func (p *parser) consumeDeclarations(s Scanner) Declarations {
+func (p *parser) consumeDeclarations(s componentValueScanner) Declarations {
 	var a Declarations
 
 	// Repeatedly consume the next token.
@@ -266,7 +266,7 @@ func (p *parser) consumeDeclarations(s Scanner) Declarations {
 				values := p.consumeDeclarationValues(s)
 
 				// Consume declaration using temporary list of tokens.
-				if d := p.consumeDeclaration(NewComponentValueScanner(values)); d != nil {
+				if d := p.consumeDeclaration(newComponentValueList(values)); d != nil {
 					a = append(a, d)
 				}
 				continue
@@ -282,7 +282,7 @@ func (p *parser) consumeDeclarations(s Scanner) Declarations {
 }
 
 // consumeDeclaration consumes a single declaration. (§5.4.5)
-func (p *parser) consumeDeclaration(s Scanner) *Declaration {
+func (p *parser) consumeDeclaration(s componentValueScanner) *Declaration {
 	d := &Declaration{}
 
 	// The first token must be an ident.
@@ -340,7 +340,7 @@ func cleanImportantFlag(values ComponentValues) (ComponentValues, bool) {
 }
 
 // consumeComponentValue consumes a single component value. (§5.4.6)
-func (p *parser) consumeComponentValue(s Scanner) ComponentValue {
+func (p *parser) consumeComponentValue(s componentValueScanner) ComponentValue {
 	tok := s.Scan()
 	if tok, ok := tok.(*Token); ok {
 		switch tok.Tok {
@@ -354,7 +354,7 @@ func (p *parser) consumeComponentValue(s Scanner) ComponentValue {
 }
 
 // consumeSimpleBlock consumes a simple block. (§5.4.7)
-func (p *parser) consumeSimpleBlock(s Scanner) *SimpleBlock {
+func (p *parser) consumeSimpleBlock(s componentValueScanner) *SimpleBlock {
 	b := &SimpleBlock{}
 
 	// Set the block's associated token to the current token.
@@ -390,7 +390,7 @@ func (p *parser) consumeSimpleBlock(s Scanner) *SimpleBlock {
 }
 
 // consumeFunction consumes a function. (§5.4.8)
-func (p *parser) consumeFunction(s Scanner) *Function {
+func (p *parser) consumeFunction(s componentValueScanner) *Function {
 	f := &Function{}
 
 	// Set the name to the first token.
@@ -411,7 +411,7 @@ func (p *parser) consumeFunction(s Scanner) *Function {
 }
 
 // consumeDeclarationTokens collects contiguous non-semicolon and non-EOF tokens.
-func (p *parser) consumeDeclarationValues(s Scanner) ComponentValues {
+func (p *parser) consumeDeclarationValues(s componentValueScanner) ComponentValues {
 	var a ComponentValues
 	for {
 		tok := s.Scan()
@@ -424,7 +424,7 @@ func (p *parser) consumeDeclarationValues(s Scanner) ComponentValues {
 }
 
 // skipComponentValues consumes all component values until a semicolon or EOF.
-func (p *parser) skipComponentValues(s Scanner) {
+func (p *parser) skipComponentValues(s componentValueScanner) {
 	for {
 		v := p.consumeComponentValue(s)
 		if tok, ok := v.(*Token); ok {
@@ -437,7 +437,7 @@ func (p *parser) skipComponentValues(s Scanner) {
 }
 
 // skipWhitespace skips over all contiguous whitespace tokes.
-func (p *parser) skipWhitespace(s Scanner) {
+func (p *parser) skipWhitespace(s componentValueScanner) {
 	for {
 		if tok, ok := s.Scan().(*Token); ok && tok.Tok != WhitespaceToken {
 			s.Unscan()
@@ -446,43 +446,43 @@ func (p *parser) skipWhitespace(s Scanner) {
 	}
 }
 
-// Scanner represents a type that can retrieve the next token.
-type Scanner interface {
+// componentValueScanner represents a type that can retrieve the next component value.
+type componentValueScanner interface {
 	Current() ComponentValue
 	Scan() ComponentValue
 	Unscan()
 }
 
-// ComponentValueScanner represents a scanner for a fixed list of component values.
-type ComponentValueScanner struct {
+// componentValueList represents a scanner for a fixed list of component values.
+type componentValueList struct {
 	i      int
 	values ComponentValues
 }
 
-// NewComponentValueScanner returns a new instance of ComponentValueScanner.
-func NewComponentValueScanner(a ComponentValues) *ComponentValueScanner {
-	return &ComponentValueScanner{i: -1, values: a}
+// newComponentValueList returns a new instance of componentValueList.
+func newComponentValueList(a ComponentValues) *componentValueList {
+	return &componentValueList{i: -1, values: a}
 }
 
 // Current returns the current component value.
-func (s *ComponentValueScanner) Current() ComponentValue {
-	if s.i >= len(s.values) {
+func (l *componentValueList) Current() ComponentValue {
+	if l.i >= len(l.values) {
 		return &Token{Tok: EOFToken}
 	}
-	return s.values[s.i]
+	return l.values[l.i]
 }
 
 // Scan returns the next component value.
-func (s *ComponentValueScanner) Scan() ComponentValue {
-	if s.i < len(s.values) {
-		s.i++
+func (l *componentValueList) Scan() ComponentValue {
+	if l.i < len(l.values) {
+		l.i++
 	}
-	return s.Current()
+	return l.Current()
 }
 
 // Unscan moves back one component value.
-func (s *ComponentValueScanner) Unscan() {
-	if s.i > -1 {
-		s.i--
+func (l *componentValueList) Unscan() {
+	if l.i > -1 {
+		l.i--
 	}
 }

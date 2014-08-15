@@ -16,8 +16,8 @@ func init() {
 	flag.Parse()
 }
 
-// Ensure than the tokenizer returns appropriate tokens and literals.
-func TestTokenizer_Scan(t *testing.T) {
+// Ensure than the scanner returns appropriate tokens and literals.
+func TestScanner_Scan(t *testing.T) {
 	var tests = []struct {
 		s   string
 		tok css.ComponentValue
@@ -160,22 +160,22 @@ func TestTokenizer_Scan(t *testing.T) {
 		}
 
 		// Scan token.
-		tokenizer := css.NewTokenizer(bytes.NewBufferString(tt.s))
-		tok := tokenizer.Scan()
+		s := css.NewScanner(bytes.NewBufferString(tt.s))
+		tok := s.Scan()
 
 		// Verify properties.
 		if !reflect.DeepEqual(tok, tt.tok) {
 			t.Errorf("%d. <%q> tok: => got %#v, want %#v", i, tt.s, tok, tt.tok)
 		} else if tt.err != "" {
-			if len(tokenizer.Errors) == 0 {
+			if len(s.Errors) == 0 {
 				t.Errorf("%d. <%q> error expected", i, tt.s)
-			} else if len(tokenizer.Errors) > 1 {
+			} else if len(s.Errors) > 1 {
 				t.Errorf("%d. <%q> too many errors occurred", i, tt.s)
-			} else if tokenizer.Errors[0].Message != tt.err {
-				t.Errorf("%d. <%q> error: got %q, want %q", i, tt.s, tokenizer.Errors[0].Message, tt.err)
+			} else if s.Errors[0].Message != tt.err {
+				t.Errorf("%d. <%q> error: got %q, want %q", i, tt.s, s.Errors[0].Message, tt.err)
 			}
-		} else if tt.err == "" && len(tokenizer.Errors) > 0 {
-			t.Errorf("%d. <%q> unexpected error: %q", i, tt.s, tokenizer.Errors[0].Message)
+		} else if tt.err == "" && len(s.Errors) > 0 {
+			t.Errorf("%d. <%q> unexpected error: %q", i, tt.s, s.Errors[0].Message)
 		}
 	}
 }
