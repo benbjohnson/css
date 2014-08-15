@@ -18,8 +18,9 @@ func TestParseRules(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseRules(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseRules(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -37,8 +38,9 @@ func TestParseRule(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseRule(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseRule(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -52,8 +54,9 @@ func TestParseDeclaration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseDeclaration(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseDeclaration(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -65,8 +68,9 @@ func TestParseDeclarations(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseDeclarations(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseDeclarations(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -89,8 +93,9 @@ func TestParseComponentValue(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseComponentValue(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseComponentValue(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -102,8 +107,9 @@ func TestParseComponentValues(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		v, err := css.ParseComponentValues(css.NewScanner(strings.NewReader(tt.in)))
-		tt.Assert(t, v, err)
+		var p css.Parser
+		v := p.ParseComponentValues(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
 	}
 }
 
@@ -115,10 +121,10 @@ type ParserTest struct {
 }
 
 // Assert validates the node against the output CSS and checks for errors.
-func (tt *ParserTest) Assert(t *testing.T, n css.Node, err error) {
+func (tt *ParserTest) Assert(t *testing.T, n css.Node, errors css.ErrorList) {
 	var errstring string
-	if err != nil {
-		errstring = err.Error()
+	if len(errors) > 0 {
+		errstring = errors.Error()
 	}
 
 	if tt.err != "" || errstring != "" {
