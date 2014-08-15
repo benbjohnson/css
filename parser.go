@@ -243,7 +243,7 @@ func (p *Parser) ConsumeDeclarations(s ComponentValueScanner) Declarations {
 				values := p.consumeDeclarationValues(s)
 
 				// Consume declaration using temporary list of tokens.
-				if d := p.ConsumeDeclaration(&componentValueList{i: -1, values: values}); d != nil {
+				if d := p.ConsumeDeclaration(NewComponentValueScanner(values)); d != nil {
 					a = append(a, d)
 				}
 				continue
@@ -433,31 +433,36 @@ type ComponentValueScanner interface {
 	Unscan()
 }
 
-// componentValueList represents a scanner for a fixed list of component values.
-type componentValueList struct {
+// NewComponentValueScanner returns a scanner for a fixed list of component values.
+func NewComponentValueScanner(values ComponentValues) ComponentValueScanner {
+	return &componentValueScanner{i: -1, values: values}
+}
+
+// componentValueScanner represents a scanner for a fixed list of component values.
+type componentValueScanner struct {
 	i      int
 	values ComponentValues
 }
 
 // Current returns the current component value.
-func (l *componentValueList) Current() ComponentValue {
-	if l.i >= len(l.values) {
+func (s *componentValueScanner) Current() ComponentValue {
+	if s.i >= len(s.values) {
 		return &Token{Tok: EOFToken}
 	}
-	return l.values[l.i]
+	return s.values[s.i]
 }
 
 // Scan returns the next component value.
-func (l *componentValueList) Scan() ComponentValue {
-	if l.i < len(l.values) {
-		l.i++
+func (s *componentValueScanner) Scan() ComponentValue {
+	if s.i < len(s.values) {
+		s.i++
 	}
-	return l.Current()
+	return s.Current()
 }
 
 // Unscan moves back one component value.
-func (l *componentValueList) Unscan() {
-	if l.i > -1 {
-		l.i--
+func (s *componentValueScanner) Unscan() {
+	if s.i > -1 {
+		s.i--
 	}
 }
