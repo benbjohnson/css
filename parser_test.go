@@ -14,6 +14,7 @@ func TestParseRules(t *testing.T) {
 		{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
 		{in: `@import url(/css/screen.css) screen, projection;`, out: `@import url(/css/screen.css) screen, projection;`},
 		{in: `@xxx; foo { padding: 10 0; }`, out: `@xxx; foo { padding: 10 0; }`},
+		{in: `<!-- comment --> foo { }`, out: `<!-- comment --> foo { }`},
 	}
 
 	for _, tt := range tests {
@@ -26,6 +27,7 @@ func TestParseRules(t *testing.T) {
 func TestParseRule(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
+		{in: `foo { padding: 10px; `, out: `foo { padding: 10px; }`},
 		{in: `  #foo bar, .baz bat {}  `, out: `#foo bar, .baz bat {}`},
 		{in: `@media (max-width: 600px) { .nav { display: none; }}`, out: `@media (max-width: 600px) { .nav { display: none; }}`},
 
