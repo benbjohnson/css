@@ -1,3 +1,3 @@
 package css_test
 
-// TODO(benbjohnson): Example: Printer.Fprint()
+// TODO(benbjohnson): Example: Printer.Print()

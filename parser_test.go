@@ -9,7 +9,7 @@ import (
 )
 
 // Ensure that a list of rules can be parsed into an AST.
-func TestParseRules(t *testing.T) {
+func TestParser_ParseRules(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
 		{in: `@import url(/css/screen.css) screen, projection;`, out: `@import url(/css/screen.css) screen, projection;`},
@@ -25,7 +25,7 @@ func TestParseRules(t *testing.T) {
 }
 
 // Ensure that a rule can be parsed into an AST.
-func TestParseRule(t *testing.T) {
+func TestParser_ParseRule(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo { padding: 10px; }`, out: `foo { padding: 10px; }`},
 		{in: `foo { padding: 10px; `, out: `foo { padding: 10px; }`},
@@ -45,7 +45,7 @@ func TestParseRule(t *testing.T) {
 }
 
 // Ensure that a declaration can be parsed into an AST.
-func TestParseDeclaration(t *testing.T) {
+func TestParser_ParseDeclaration(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo: bar`, out: `foo: bar`},
 
@@ -61,7 +61,7 @@ func TestParseDeclaration(t *testing.T) {
 }
 
 // Ensure that a list of declarations can be parsed into an AST.
-func TestParseDeclarations(t *testing.T) {
+func TestParser_ParseDeclarations(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo: bar`, out: `foo: bar;`},
 		{in: `font-size: 20px; font-weight:bold`, out: `font-size: 20px; font-weight:bold;`},
@@ -75,7 +75,7 @@ func TestParseDeclarations(t *testing.T) {
 }
 
 // Ensure that component values can be parsed into the correct AST.
-func TestParseComponentValue(t *testing.T) {
+func TestParser_ParseComponentValue(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo`, out: `foo`},
 		{in: `  :`, out: `:`},
@@ -100,7 +100,7 @@ func TestParseComponentValue(t *testing.T) {
 }
 
 // Ensure that a list of component values can be parsed into the correct AST.
-func TestParseComponentValues(t *testing.T) {
+func TestParser_ParseComponentValues(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo bar`, out: `foo bar`},
 		{in: `foo func(bar) { baz }`, out: `foo func(bar) { baz }`},
@@ -110,6 +110,31 @@ func TestParseComponentValues(t *testing.T) {
 		var p css.Parser
 		v := p.ParseComponentValues(css.NewScanner(strings.NewReader(tt.in)))
 		tt.Assert(t, v, p.Errors)
+	}
+}
+
+// Ensure that a ruleset can be parsed from a list of component values.
+func TestParser_ConsumeRules(t *testing.T) {
+	var tests = []ParserTest{
+		{in: `@media (max-width: 600px) { @test xxx { width: 100 } .nav { display: none; } }`, out: `@test xxx { width: 100 } .nav { display: none; }`},
+	}
+
+	for _, tt := range tests {
+		var p css.Parser
+		r := p.ParseRule(css.NewScanner(strings.NewReader(tt.in)))
+		s := css.NewComponentValueScanner(r.(*css.AtRule).Block.Values)
+		v := p.ConsumeRules(s, false)
+		tt.Assert(t, v, p.Errors)
+	}
+}
+
+// Ensure that consuming an empty string as a qualified rule returns an error.
+func TestParser_ConsumeQualifiedRule_ErrUnexpectedEOF(t *testing.T) {
+	var p css.Parser
+	if v := p.ConsumeQualifiedRule(css.NewComponentValueScanner(nil)); v != nil {
+		t.Errorf("unexpected value: %s", print(v))
+	} else if p.Errors.Error() != "unexpected EOF" {
+		t.Errorf("expected error msg: %s", p.Errors.Error())
 	}
 }
 
@@ -142,6 +167,6 @@ func (tt *ParserTest) Assert(t *testing.T, n css.Node, errors css.ErrorList) {
 func print(n css.Node) string {
 	var buf bytes.Buffer
 	var p css.Printer
-	_ = p.Fprint(&buf, n)
+	_ = p.Print(&buf, n)
 	return buf.String()
 }

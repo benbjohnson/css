@@ -11,11 +11,11 @@ import (
 // Printer represents a configurable CSS printer.
 type Printer struct{}
 
-func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
+func (p *Printer) Print(w io.Writer, n Node) (err error) {
 	switch n := n.(type) {
 	case *StyleSheet:
 		for _, r := range n.Rules {
-			_ = p.Fprint(w, r)
+			_ = p.Print(w, r)
 			_, err = w.Write([]byte{'\n'})
 		}
 
@@ -24,29 +24,29 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 			if i > 0 {
 				_, _ = w.Write([]byte{' '})
 			}
-			err = p.Fprint(w, r)
+			err = p.Print(w, r)
 		}
 
 	case *AtRule:
 		_, _ = w.Write([]byte{'@'})
 		_, _ = w.Write([]byte(n.Name))
 		if len(n.Prelude) > 0 {
-			_ = p.Fprint(w, n.Prelude)
+			_ = p.Print(w, n.Prelude)
 		}
 		if n.Block != nil {
-			err = p.Fprint(w, n.Block)
+			err = p.Print(w, n.Block)
 		} else {
 			_, err = w.Write([]byte{';'})
 		}
 
 	case *QualifiedRule:
-		_ = p.Fprint(w, n.Prelude)
-		err = p.Fprint(w, n.Block)
+		_ = p.Print(w, n.Prelude)
+		err = p.Print(w, n.Block)
 
 	case *Declaration:
 		_, _ = w.Write([]byte(n.Name))
 		_, _ = w.Write([]byte{':'})
-		err = p.Fprint(w, n.Values)
+		err = p.Print(w, n.Values)
 		if n.Important {
 			_, err = w.Write([]byte(" !important"))
 		}
@@ -56,13 +56,13 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 			if i > 0 {
 				_, _ = w.Write([]byte{' '})
 			}
-			_ = p.Fprint(w, v)
+			_ = p.Print(w, v)
 			_, err = w.Write([]byte{';'})
 		}
 
 	case ComponentValues:
 		for _, v := range n {
-			err = p.Fprint(w, v)
+			err = p.Print(w, v)
 		}
 
 	case *SimpleBlock:
@@ -75,7 +75,7 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 			_, _ = w.Write([]byte{'('})
 		}
 
-		_ = p.Fprint(w, n.Values)
+		_ = p.Print(w, n.Values)
 
 		switch n.Token.Tok {
 		case LBraceToken:
@@ -89,7 +89,7 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 	case *Function:
 		_, _ = w.Write([]byte(n.Name))
 		_, _ = w.Write([]byte{'('})
-		_ = p.Fprint(w, n.Values)
+		_ = p.Print(w, n.Values)
 		_, err = w.Write([]byte{')'})
 
 	case *Token:
@@ -160,6 +160,6 @@ func (p *Printer) Fprint(w io.Writer, n Node) (err error) {
 func print(n Node) string {
 	var p Printer
 	var buf bytes.Buffer
-	_ = p.Fprint(&buf, n)
+	_ = p.Print(&buf, n)
 	return buf.String()
 }

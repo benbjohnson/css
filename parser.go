@@ -181,7 +181,7 @@ func (p *Parser) ConsumeAtRule(s ComponentValueScanner) *AtRule {
 			}
 		case *SimpleBlock:
 			if tok.Token.Tok == LBraceToken {
-				r.Block = p.ConsumeSimpleBlock(s)
+				r.Block = tok
 				return &r
 			}
 		}
@@ -212,7 +212,7 @@ func (p *Parser) ConsumeQualifiedRule(s ComponentValueScanner) *QualifiedRule {
 			}
 		case *SimpleBlock:
 			if tok.Token.Tok == LBraceToken {
-				r.Block = p.ConsumeSimpleBlock(s)
+				r.Block = tok
 				return &r
 			}
 		}
@@ -434,6 +434,9 @@ type ComponentValueScanner interface {
 }
 
 // NewComponentValueScanner returns a scanner for a fixed list of component values.
+// This can be used with nodes which have blocks such as at-rules. For example,
+// a @media query can have a full ruleset inside its block. This block can be
+// further parsed using the consume functions on the Parser.
 func NewComponentValueScanner(values ComponentValues) ComponentValueScanner {
 	return &componentValueScanner{i: -1, values: values}
 }
