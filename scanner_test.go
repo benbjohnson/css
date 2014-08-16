@@ -89,8 +89,9 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `url(foo bar)`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}},
 		{s: `url(foo'`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `invalid url code point: ' (U+0027)`},
 		{s: `url(foo(`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `invalid url code point: ( (U+0028)`},
-		{s: "url(foo\001 \001", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: "invalid url code point: \001 (U+0001)"},
+		{s: "url(foo\001 \\2603", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: "invalid url code point: \001 (U+0001)"},
 		{s: "url(foo\\\n", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `unescaped \ in url`},
+		{s: "url(foo\001 \001", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: "invalid url code point: \001 (U+0001)"},
 
 		{s: `myFunc(`, tok: &css.Token{Tok: css.FunctionToken, Value: `myFunc`, Pos: css.Pos{1, 0}}},
 
@@ -127,6 +128,7 @@ func TestScanner_Scan(t *testing.T) {
 
 		{s: `@`, tok: &css.Token{Tok: css.DelimToken, Value: "@", Pos: css.Pos{1, 0}}},
 		{s: `@foo`, tok: &css.Token{Tok: css.AtKeywordToken, Value: "foo", Pos: css.Pos{1, 0}}},
+		{s: `@\2603`, tok: &css.Token{Tok: css.AtKeywordToken, Value: "☃", Pos: css.Pos{1, 0}}},
 
 		{s: `\2603`, tok: &css.Token{Tok: css.IdentToken, Value: "☃", Pos: css.Pos{1, 0}}},
 		{s: `\`, tok: &css.Token{Tok: css.IdentToken, Value: "\uFFFD", Pos: css.Pos{1, 0}}},

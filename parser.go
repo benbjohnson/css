@@ -2,7 +2,6 @@ package css
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -471,6 +470,3 @@ func (s *componentValueScanner) Unscan() {
 		s.i--
 	}
 }
-
-func warn(v ...interface{})              { fmt.Fprintln(os.Stderr, v...) }
-func warnf(msg string, v ...interface{}) { fmt.Fprintf(os.Stderr, msg+"\n", v...) }
