@@ -6,7 +6,7 @@ import (
 	"io"
 )
 
-// TODO(benbjohnson): Add whitespace trimming to printer.
+// TODO(benbjohnson): Allow collapsing whitespace.
 
 // Printer represents a configurable CSS printer.
 type Printer struct{}
@@ -145,7 +145,11 @@ func (p *Printer) Print(w io.Writer, n Node) (err error) {
 		case DelimToken, NumberToken, PercentageToken, DimensionToken, WhitespaceToken:
 			_, err = w.Write([]byte(n.Value))
 		case UnicodeRangeToken:
-			_, err = fmt.Fprintf(w, "U+%06x-U+%06x", n.Start, n.End)
+			if n.Start == n.End {
+				_, err = fmt.Fprintf(w, "U+%06x", n.Start)
+			} else {
+				_, err = fmt.Fprintf(w, "U+%06x-U+%06x", n.Start, n.End)
+			}
 		case IncludeMatchToken:
 			_, err = w.Write([]byte("~="))
 		case DashMatchToken:
