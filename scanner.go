@@ -96,7 +96,6 @@ func (s *Scanner) scan() *Token {
 				s.unread(1)
 				return s.scanNumeric(pos)
 			} else if s.peekIdent() {
-				s.unread(1)
 				return s.scanIdent()
 			}
 
@@ -246,18 +245,25 @@ func (s *Scanner) scanString() *Token {
 			s.unread(1)
 			return &Token{Tok: BadStringToken, Pos: pos}
 		} else if ch == '\\' {
-			if s.peekEscape() {
-				_, _ = buf.WriteRune(s.scanEscape())
-				continue
-			}
+			// If the next code point is EOF then do nothing.
+			// If it is a newline then consume it.
 			if next := s.read(); next == eof {
 				continue
 			} else if next == '\n' {
 				_, _ = buf.WriteRune(next)
+				continue
 			}
-		} else {
-			_, _ = buf.WriteRune(ch)
+			s.unread(1)
+
+			// If it is an escape then consume the escaped code point.
+			if s.peekEscape() {
+				_, _ = buf.WriteRune(s.scanEscape())
+				continue
+			}
 		}
+
+		// Append anything else to the buffer.
+		_, _ = buf.WriteRune(ch)
 	}
 }
 
@@ -652,17 +658,18 @@ func (s *Scanner) peekNumber() bool {
 	case '+', '-':
 		ch0, ch1 := s.read(), s.read()
 		s.unread(2)
-		return isDigit(ch0) || (ch0 == '.' && isDigit(ch1))
+		if isDigit(ch0) || (ch0 == '.' && isDigit(ch1)) {
+			return true
+		}
 	case '.':
 		ch0 := s.read()
 		s.unread(1)
-		return isDigit(ch0)
+		if isDigit(ch0) {
+			return true
+		}
 	}
 
-	// If the current code point is a digit then return true.
-	if isDigit(s.curr()) {
-		return true
-	}
+	// Note: We don't check for digits here because its done in Scan().
 
 	// Anything else is not a number.
 	return false

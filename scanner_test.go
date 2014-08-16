@@ -25,6 +25,10 @@ func TestScanner_Scan(t *testing.T) {
 	}{
 		{s: ``, tok: &css.Token{Tok: css.EOFToken}},
 		{s: `   `, tok: &css.Token{Tok: css.WhitespaceToken, Value: `   `, Pos: css.Pos{1, 0}}},
+		{s: " \n", tok: &css.Token{Tok: css.WhitespaceToken, Value: " \n", Pos: css.Pos{1, 0}}},
+		{s: " \f", tok: &css.Token{Tok: css.WhitespaceToken, Value: " \n", Pos: css.Pos{1, 0}}},
+		{s: " \r", tok: &css.Token{Tok: css.WhitespaceToken, Value: " \n", Pos: css.Pos{1, 0}}},
+		{s: " \r ", tok: &css.Token{Tok: css.WhitespaceToken, Value: " \n", Pos: css.Pos{1, 0}}},
 
 		{s: `""`, tok: &css.Token{Tok: css.StringToken, Value: ``, Ending: '"', Pos: css.Pos{1, 0}}},
 		{s: `"`, tok: &css.Token{Tok: css.StringToken, Value: ``, Ending: '"', Pos: css.Pos{1, 0}}},
@@ -34,7 +38,9 @@ func TestScanner_Scan(t *testing.T) {
 		{s: "'foo\\\nbar'", tok: &css.Token{Tok: css.StringToken, Value: "foo\nbar", Ending: '\'', Pos: css.Pos{1, 0}}},
 		{s: `'foo\ bar'`, tok: &css.Token{Tok: css.StringToken, Value: `foo bar`, Ending: '\'', Pos: css.Pos{1, 0}}},
 		{s: `'foo\\bar'`, tok: &css.Token{Tok: css.StringToken, Value: `foo\bar`, Ending: '\'', Pos: css.Pos{1, 0}}},
+		{s: `'foo\`, tok: &css.Token{Tok: css.StringToken, Value: `foo`, Ending: '\'', Pos: css.Pos{1, 0}}},
 		{s: `'frosty the \2603'`, tok: &css.Token{Tok: css.StringToken, Value: `frosty the ☃`, Ending: '\'', Pos: css.Pos{1, 0}}},
+		{s: "'foo bar\n", tok: &css.Token{Tok: css.BadStringToken, Value: ``, Pos: css.Pos{1, 0}}},
 
 		{s: `0`, tok: &css.Token{Tok: css.NumberToken, Type: "integer", Value: `0`, Number: 0.0, Pos: css.Pos{1, 0}}},
 		{s: `1.0`, tok: &css.Token{Tok: css.NumberToken, Type: "number", Value: `1.0`, Number: 1.0, Pos: css.Pos{1, 0}}},
@@ -59,8 +65,11 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `.`, tok: &css.Token{Tok: css.DelimToken, Value: `.`, Pos: css.Pos{1, 0}}},
 
 		{s: `url`, tok: &css.Token{Tok: css.IdentToken, Value: `url`, Pos: css.Pos{1, 0}}},
+		{s: `-url`, tok: &css.Token{Tok: css.IdentToken, Value: `-url`, Pos: css.Pos{1, 0}}},
 		{s: `myIdent`, tok: &css.Token{Tok: css.IdentToken, Value: `myIdent`, Pos: css.Pos{1, 0}}},
 		{s: `my\2603`, tok: &css.Token{Tok: css.IdentToken, Value: `my☃`, Pos: css.Pos{1, 0}}},
+		{s: `\2603`, tok: &css.Token{Tok: css.IdentToken, Value: `☃`, Pos: css.Pos{1, 0}}},
+		{s: "\000", tok: &css.Token{Tok: css.IdentToken, Value: "\uFFFD", Pos: css.Pos{1, 0}}},
 
 		{s: `url(`, tok: &css.Token{Tok: css.URLToken, Value: ``, Pos: css.Pos{1, 0}}},
 		{s: `url(foo`, tok: &css.Token{Tok: css.URLToken, Value: `foo`, Pos: css.Pos{1, 0}}},
@@ -75,10 +84,12 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `url("foo")`, tok: &css.Token{Tok: css.URLToken, Value: `foo`, Pos: css.Pos{1, 0}}},
 		{s: `url("foo"x`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}},
 		{s: `url("foo" x`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}},
+		{s: "url('foo\n", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}},
 		{s: `url(foo"`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `invalid url code point: " (U+0022)`},
+		{s: `url(foo bar)`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}},
 		{s: `url(foo'`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `invalid url code point: ' (U+0027)`},
 		{s: `url(foo(`, tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `invalid url code point: ( (U+0028)`},
-		{s: "url(foo\001", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: "invalid url code point: \001 (U+0001)"},
+		{s: "url(foo\001 \001", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: "invalid url code point: \001 (U+0001)"},
 		{s: "url(foo\\\n", tok: &css.Token{Tok: css.BadURLToken, Pos: css.Pos{1, 0}}, err: `unescaped \ in url`},
 
 		{s: `myFunc(`, tok: &css.Token{Tok: css.FunctionToken, Value: `myFunc`, Pos: css.Pos{1, 0}}},
@@ -107,6 +118,7 @@ func TestScanner_Scan(t *testing.T) {
 
 		{s: `/`, tok: &css.Token{Tok: css.DelimToken, Value: `/`, Pos: css.Pos{1, 0}}},
 		{s: `/* this is * a comment */#`, tok: &css.Token{Tok: css.DelimToken, Value: "#", Pos: css.Pos{26, 0}}},
+		{s: `/* this is a comment`, tok: &css.Token{Tok: css.EOFToken, Pos: css.Pos{20, 0}}},
 
 		{s: `<`, tok: &css.Token{Tok: css.DelimToken, Value: "<", Pos: css.Pos{1, 0}}},
 		{s: `<!`, tok: &css.Token{Tok: css.DelimToken, Value: "<", Pos: css.Pos{1, 0}}},
@@ -165,7 +177,7 @@ func TestScanner_Scan(t *testing.T) {
 
 		// Verify properties.
 		if !reflect.DeepEqual(tok, tt.tok) {
-			t.Errorf("%d. <%q> tok: => got %#v, want %#v", i, tt.s, tok, tt.tok)
+			t.Errorf("%d. <%q> tok: =>\n\ngot %#v\n\nwant %#v\n\n", i, tt.s, tok, tt.tok)
 		} else if tt.err != "" {
 			if len(s.Errors) == 0 {
 				t.Errorf("%d. <%q> error expected", i, tt.s)
