@@ -14,12 +14,20 @@ type Printer struct{}
 func (p *Printer) Print(w io.Writer, n Node) (err error) {
 	switch n := n.(type) {
 	case *StyleSheet:
-		for _, r := range n.Rules {
+		if n == nil {
+			return nil
+		}
+		for i, r := range n.Rules {
+			if i > 0 {
+				_, err = w.Write([]byte{' '})
+			}
 			_ = p.Print(w, r)
-			_, err = w.Write([]byte{'\n'})
 		}
 
 	case Rules:
+		if n == nil {
+			return nil
+		}
 		for i, r := range n {
 			if i > 0 {
 				_, _ = w.Write([]byte{' '})
@@ -28,6 +36,9 @@ func (p *Printer) Print(w io.Writer, n Node) (err error) {
 		}
 
 	case *AtRule:
+		if n == nil {
+			return nil
+		}
 		_, _ = w.Write([]byte{'@'})
 		_, _ = w.Write([]byte(n.Name))
 		if len(n.Prelude) > 0 {
@@ -40,18 +51,27 @@ func (p *Printer) Print(w io.Writer, n Node) (err error) {
 		}
 
 	case *QualifiedRule:
+		if n == nil {
+			return nil
+		}
 		_ = p.Print(w, n.Prelude)
 		err = p.Print(w, n.Block)
 
 	case *Declaration:
+		if n == nil {
+			return nil
+		}
 		_, _ = w.Write([]byte(n.Name))
 		_, _ = w.Write([]byte{':'})
 		err = p.Print(w, n.Values)
 		if n.Important {
-			_, err = w.Write([]byte(" !important"))
+			_, err = w.Write([]byte("!important"))
 		}
 
 	case Declarations:
+		if n == nil {
+			return nil
+		}
 		for i, v := range n {
 			if i > 0 {
 				_, _ = w.Write([]byte{' '})
@@ -61,11 +81,17 @@ func (p *Printer) Print(w io.Writer, n Node) (err error) {
 		}
 
 	case ComponentValues:
+		if n == nil {
+			return nil
+		}
 		for _, v := range n {
 			err = p.Print(w, v)
 		}
 
 	case *SimpleBlock:
+		if n == nil {
+			return nil
+		}
 		switch n.Token.Tok {
 		case LBraceToken:
 			_, _ = w.Write([]byte{'{'})
@@ -87,12 +113,18 @@ func (p *Printer) Print(w io.Writer, n Node) (err error) {
 		}
 
 	case *Function:
+		if n == nil {
+			return nil
+		}
 		_, _ = w.Write([]byte(n.Name))
 		_, _ = w.Write([]byte{'('})
 		_ = p.Print(w, n.Values)
 		_, err = w.Write([]byte{')'})
 
 	case *Token:
+		if n == nil {
+			return nil
+		}
 		switch n.Tok {
 		case IdentToken:
 			_, err = w.Write([]byte(n.Value))

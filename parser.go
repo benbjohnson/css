@@ -2,6 +2,7 @@ package css
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -228,6 +229,7 @@ func (p *Parser) ConsumeDeclarations(s ComponentValueScanner) Declarations {
 	// Repeatedly consume the next token.
 	for {
 		tok := s.Scan()
+
 		if tok, ok := tok.(*Token); ok {
 			switch tok.Tok {
 			case WhitespaceToken, SemicolonToken:
@@ -309,7 +311,7 @@ func cleanImportantFlag(values ComponentValues) (ComponentValues, bool) {
 	// Trim "!important" tokens off values.
 	for i, v := range values {
 		if v == a[len(a)-2] {
-			values = values[i:]
+			values = values[:i]
 			break
 		}
 	}
@@ -469,3 +471,6 @@ func (s *componentValueScanner) Unscan() {
 		s.i--
 	}
 }
+
+func warn(v ...interface{})              { fmt.Fprintln(os.Stderr, v...) }
+func warnf(msg string, v ...interface{}) { fmt.Fprintf(os.Stderr, msg+"\n", v...) }

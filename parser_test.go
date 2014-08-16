@@ -8,6 +8,19 @@ import (
 	"github.com/benbjohnson/css"
 )
 
+// Ensure that a stylesheet can be parsed into an AST.
+func TestParser_ParseStyleSheet(t *testing.T) {
+	var tests = []ParserTest{
+		{in: `foo { padding: 10px; } @bar;`, out: `foo { padding: 10px; } @bar;`},
+	}
+
+	for _, tt := range tests {
+		var p css.Parser
+		v := p.ParseStyleSheet(css.NewScanner(strings.NewReader(tt.in)))
+		tt.Assert(t, v, p.Errors)
+	}
+}
+
 // Ensure that a list of rules can be parsed into an AST.
 func TestParser_ParseRules(t *testing.T) {
 	var tests = []ParserTest{
@@ -48,6 +61,11 @@ func TestParser_ParseRule(t *testing.T) {
 func TestParser_ParseDeclaration(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo: bar`, out: `foo: bar`},
+		{in: `color: #FFFFFF !important`, out: `color: #FFFFFF !important`},
+		{in: `color: #FFFFFF ! important `, out: `color: #FFFFFF !important`},
+		{in: `color: !important `, out: `color: !important`},
+		{in: `color: $ important`, out: `color: $ important`},
+		{in: `color: ! importante`, out: `color: ! importante`},
 
 		{in: ``, err: `expected ident, got EOF`},
 		{in: ` foo bar`, err: `expected colon, got bar`},
@@ -65,6 +83,9 @@ func TestParser_ParseDeclarations(t *testing.T) {
 	var tests = []ParserTest{
 		{in: `foo: bar`, out: `foo: bar;`},
 		{in: `font-size: 20px; font-weight:bold`, out: `font-size: 20px; font-weight:bold;`},
+		{in: `font-weight: bold; @page { margin: 1in; };`, out: `font-weight: bold; @page { margin: 1in; };`},
+		{in: `@page { margin: 1in; }; font-weight: bold;`, out: `@page { margin: 1in; }; font-weight: bold;`},
+		{in: `100; foo: bar`, out: `foo: bar;`, err: `unexpected: 100`},
 	}
 
 	for _, tt := range tests {
@@ -152,11 +173,9 @@ func (tt *ParserTest) Assert(t *testing.T, n css.Node, errors css.ErrorList) {
 		errstring = errors.Error()
 	}
 
-	if tt.err != "" || errstring != "" {
-		if tt.err != errstring {
-			t.Errorf("<%q> error: exp=%q, got=%q", tt.in, tt.err, errstring)
-		}
-	} else if n == nil {
+	if (tt.err != "" || errstring != "") && tt.err != errstring {
+		t.Errorf("<%q> error: exp=%q, got=%q", tt.in, tt.err, errstring)
+	} else if n == nil && tt.out != "" {
 		t.Errorf("<%q> expected value", tt.in)
 	} else if print(n) != tt.out {
 		t.Errorf("<%q>\n\nexp: %s\n\ngot: %s", tt.in, tt.out, print(n))
