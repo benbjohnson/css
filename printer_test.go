@@ -15,16 +15,16 @@ func TestPrinter_Print(t *testing.T) {
 	}{
 		// 0. Full stylesheet with multiple rules.
 		{in: &css.StyleSheet{
-			Rules: css.Rules{
+			Rules: []css.Rule{
 				&css.QualifiedRule{
-					Prelude: css.ComponentValues{
+					Prelude: []css.ComponentValue{
 						&css.Token{Tok: css.IdentToken, Value: "foo"},
 						&css.Token{Tok: css.WhitespaceToken, Value: " "},
 						&css.Token{Tok: css.IdentToken, Value: "bar"},
 					},
 					Block: &css.SimpleBlock{
 						Token: &css.Token{Tok: css.LBraceToken},
-						Values: css.ComponentValues{
+						Values: []css.ComponentValue{
 							&css.Token{Tok: css.IdentToken, Value: "font-size"},
 							&css.Token{Tok: css.ColonToken},
 							&css.Token{Tok: css.IdentToken, Value: "10px"},
@@ -33,7 +33,7 @@ func TestPrinter_Print(t *testing.T) {
 				},
 				&css.AtRule{
 					Name: "baz",
-					Prelude: css.ComponentValues{
+					Prelude: []css.ComponentValue{
 						&css.Token{Tok: css.WhitespaceToken, Value: " "},
 						&css.Token{Tok: css.IdentToken, Value: "my-rule"},
 					},
