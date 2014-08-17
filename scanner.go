@@ -56,41 +56,74 @@ func (s *Scanner) scan() *Token {
 		ch := s.read()
 		pos := s.pos()
 
-		if ch == eof {
-			return &Token{Tok: EOFToken, Pos: pos}
-		} else if isWhitespace(ch) {
+		// If whitespace code point found, then consume all contiguous whitespace.
+		if isWhitespace(ch) {
 			return s.scanWhitespace()
-		} else if ch == '"' || ch == '\'' {
+		}
+
+		// If a digit is found, consume a number.
+		if isDigit(ch) {
+			s.unread(1)
+			return s.scanNumeric(pos)
+		}
+
+		// If a u or U is found, attempt to scan a unicode range.
+		// If it's the beginning of a name then consume an identifier.
+		if ch == 'u' || ch == 'U' {
+			// Peek "+[0-9a-f]" or "+?", consume next code point, consume unicode-range.
+			ch1, ch2 := s.read(), s.read()
+			if ch1 == '+' && (isHexDigit(ch2) || ch2 == '?') {
+				s.unread(1)
+				return s.scanUnicodeRange()
+			}
+			// Otherwise reconsume as ident.
+			s.unread(2)
+			return s.scanIdent()
+		} else if isNameStart(ch) {
+			return s.scanIdent()
+		}
+
+		// Check against individual code points next.
+		switch ch {
+		case eof:
+			return &Token{Tok: EOFToken, Pos: pos}
+		case '"', '\'':
 			return s.scanString()
-		} else if ch == '#' {
+		case '#':
 			return s.scanHash()
-		} else if ch == '$' {
+
+		case '$':
 			if next := s.read(); next == '=' {
 				return &Token{Tok: SuffixMatchToken, Pos: pos}
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
-		} else if ch == '*' {
+
+		case '*':
 			if next := s.read(); next == '=' {
 				return &Token{Tok: SubstringMatchToken, Pos: pos}
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
-		} else if ch == '^' {
+
+		case '^':
 			if next := s.read(); next == '=' {
 				return &Token{Tok: PrefixMatchToken, Pos: pos}
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
-		} else if ch == '~' {
+
+		case '~':
 			if next := s.read(); next == '=' {
 				return &Token{Tok: IncludeMatchToken, Pos: pos}
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
-		} else if ch == ',' {
+
+		case ',':
 			return &Token{Tok: CommaToken, Pos: pos}
-		} else if ch == '-' {
+
+		case '-':
 			// Check for a number or identifier.
 			if s.peekNumber() {
 				s.unread(1)
@@ -108,7 +141,8 @@ func (s *Scanner) scan() *Token {
 
 			// Otherwise return the hyphen by itself.
 			return &Token{Tok: DelimToken, Value: "-", Pos: pos}
-		} else if ch == '/' {
+
+		case '/':
 			// Comments are ignored by the scanner so restart the loop from
 			// the end of the comment and get the next token.
 			if ch1 := s.read(); ch1 == '*' {
@@ -117,11 +151,13 @@ func (s *Scanner) scan() *Token {
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: "/", Pos: pos}
-		} else if ch == ':' {
+
+		case ':':
 			return &Token{Tok: ColonToken, Pos: pos}
-		} else if ch == ';' {
+		case ';':
 			return &Token{Tok: SemicolonToken, Pos: pos}
-		} else if ch == '<' {
+
+		case '<':
 			// Attempt to read a comment open ("<!--").
 			// If it's not possible then then rollback and return DELIM.
 			if ch0 := s.read(); ch0 == '!' {
@@ -135,26 +171,29 @@ func (s *Scanner) scan() *Token {
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: "<", Pos: pos}
-		} else if ch == '@' {
+
+		case '@':
 			// This is an at-keyword token if an identifier follows.
 			// Otherwise it's just a DELIM.
 			if s.read(); s.peekIdent() {
 				return &Token{Tok: AtKeywordToken, Value: s.scanName(), Pos: pos}
 			}
 			return &Token{Tok: DelimToken, Value: "@", Pos: pos}
-		} else if ch == '(' {
+
+		case '(':
 			return &Token{Tok: LParenToken, Pos: pos}
-		} else if ch == ')' {
+		case ')':
 			return &Token{Tok: RParenToken, Pos: pos}
-		} else if ch == '[' {
+		case '[':
 			return &Token{Tok: LBrackToken, Pos: pos}
-		} else if ch == ']' {
+		case ']':
 			return &Token{Tok: RBrackToken, Pos: pos}
-		} else if ch == '{' {
+		case '{':
 			return &Token{Tok: LBraceToken, Pos: pos}
-		} else if ch == '}' {
+		case '}':
 			return &Token{Tok: RBraceToken, Pos: pos}
-		} else if ch == '\\' {
+
+		case '\\':
 			// Return a valid escape, if possible.
 			if s.peekEscape() {
 				return s.scanIdent()
@@ -162,28 +201,15 @@ func (s *Scanner) scan() *Token {
 			// Otherwise this is a parse error but continue on as a DELIM.
 			s.Errors = append(s.Errors, &Error{Message: "unescaped \\", Pos: s.pos()})
 			return &Token{Tok: DelimToken, Value: "\\", Pos: pos}
-		} else if isDigit(ch) {
-			s.unread(1)
-			return s.scanNumeric(pos)
-		} else if ch == '+' || ch == '.' {
+
+		case '+', '.':
 			if s.peekNumber() {
 				s.unread(1)
 				return s.scanNumeric(pos)
 			}
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
-		} else if ch == 'u' || ch == 'U' {
-			// Peek "+[0-9a-f]" or "+?", consume next code point, consume unicode-range.
-			ch1, ch2 := s.read(), s.read()
-			if ch1 == '+' && (isHexDigit(ch2) || ch2 == '?') {
-				s.unread(1)
-				return s.scanUnicodeRange()
-			}
-			// Otherwise reconsume as ident.
-			s.unread(2)
-			return s.scanIdent()
-		} else if isNameStart(ch) {
-			return s.scanIdent()
-		} else if ch == '|' {
+
+		case '|':
 			// If the next token is an equals sign, it's a dash token.
 			// If the next token is a pipe, it's a column token.
 			// Otherwise, just treat this pipe as a delim token.
@@ -194,8 +220,10 @@ func (s *Scanner) scan() *Token {
 			}
 			s.unread(1)
 			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
+
+		default:
+			return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
 		}
-		return &Token{Tok: DelimToken, Value: string(ch), Pos: pos}
 	}
 }
 
