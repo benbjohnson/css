@@ -2,7 +2,7 @@ css [![Build Status](https://drone.io/github.com/benbjohnson/css/status.png)](ht
 ===
 
 This package provides a CSS parser and scanner in pure Go. It is an
-implementation as specified in the W3C's [CSS Syntax Module Level 3](css3-syntax).
+implementation as specified in the W3C's [CSS Syntax Module Level 3][css3-syntax].
 
 For documentation on how to use this package, please see the [godoc][godoc].
 
